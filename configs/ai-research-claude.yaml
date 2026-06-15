@@ -1,0 +1,18 @@
+name: ai-research
+
+search_queries:
+  - LLM foundation model releases benchmarks
+  - AI models and products launch announcements
+  - Model updates product feature releases Anthropic claude
+  - Model updates product feature releases OpenAI ChatGPT
+  - Model updates product feature releases Google Gemini
+  - AI hardware Nvidia GPU infrastructure
+  - AI startup funding investment rounds
+  - AI partnership integration collaboration announcements
+  - AI regulation policy safety and security US EU
+
+recency_days: 7
+num_results: 1
+
+provider: anthropic
+fast_model: claude-haiku-4-5

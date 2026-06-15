@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: A4;
+    margin: 1.1cm 1.25cm 1cm 1.25cm;
+  }
+
+  * {
+    border: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.65;
+    color: #1c1c1c;
+  }
+
+  h1 {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 22pt;
+    font-weight: bold;
+    color: #0f2d5c;
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    color: #888;
+    margin-bottom: 28px;
+  }
+
+  hr {
+    border-top: 1px solid #dde3ea;
+    margin: 18px 0;
+  }
+
+  h3 {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12pt;
+    font-weight: bold;
+    color: #0f2d5c;
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+
+  .meta {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8pt;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 8px;
+  }
+
+  .summary {
+    font-size: 11pt;
+    color: #2c2c2c;
+    margin-bottom: 7px;
+  }
+
+  .url {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8.5pt;
+    color: #0f2d5c;
+  }
+
+  .footer {
+    margin-top: 32px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8pt;
+    color: #aaa;
+  }
+</style>
+</head>
+<body>
+
+<h1>Research Newsletter</h1>
+<p class="subtitle">{{ newsletter.newsletter_date }} &nbsp;&bull;&nbsp; {{ meta.article_count }} articles</p>
+
+{% for section in newsletter.sections %}
+{% if not loop.first %}<hr>{% endif %}
+<h3>{{ section.headline }}</h3>
+<p class="meta">{{ section.published_date[:10] if section.published_date else "" }} &nbsp;&bull;&nbsp; {{ section.source }}</p>
+<p class="summary">{{ section.summary }}</p>
+<p class="url"><a href="{{ section.url }}" style="color:#0f2d5c;">{{ section.url }}</a></p>
+{% endfor %}
+
+<p class="footer">Generated {{ meta.generated_at }} &nbsp;&bull;&nbsp; {{ meta.article_count }} articles &nbsp;&bull;&nbsp; Cost: ${{ "%.4f"|format(meta.cost_usd) }}</p>
+
+</body>
+</html>
