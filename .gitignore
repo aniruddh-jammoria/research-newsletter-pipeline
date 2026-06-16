@@ -3,6 +3,7 @@
 
 # Runtime data
 data/state.db
+data/*.html
 *.pdf
 
 # Generated output

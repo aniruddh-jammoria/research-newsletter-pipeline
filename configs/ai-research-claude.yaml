@@ -12,7 +12,7 @@ search_queries:
   - AI regulation policy safety and security US EU
 
 recency_days: 7
-num_results: 1
+num_results: 5
 
 provider: anthropic
 fast_model: claude-haiku-4-5

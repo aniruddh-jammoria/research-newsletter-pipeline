@@ -2,7 +2,7 @@ name: Research Newsletter
 
 on:
   schedule:
-    - cron: '0 7 * * 1'   # Every Monday at 7am UTC — edit to change schedule
+    - cron: '0 7 * * 1'   # 07:00 UTC = 09:00 CEST (summer) / 08:00 CET (winter)
   workflow_dispatch:        # Manual trigger from the GitHub Actions UI
 
 jobs:
