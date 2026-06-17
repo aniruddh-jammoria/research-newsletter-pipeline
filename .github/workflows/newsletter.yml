@@ -1,4 +1,4 @@
-name: Research Newsletter
+name: Research Newsletter Pipeline
 
 on:
   schedule:

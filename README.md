@@ -1,4 +1,4 @@
-# Research Newsletter Agent
+# Research Newsletter Pipeline
 
 An automated pipeline that searches the web for recent news on topics you define, filters the results with an LLM, and delivers a formatted PDF newsletter to your Telegram.
 
@@ -18,7 +18,7 @@ Every run is logged to a local SQLite database (article count, token usage, cost
 ## Project structure
 
 ```
-research-newsletter-agent/
+research-newsletter-pipeline/
 ├── configs/                  # One YAML file per newsletter
 │   └── ai-research-claude.yaml
 ├── newsletter/
