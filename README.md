@@ -1,20 +1,20 @@
 # Research Newsletter Pipeline
 
-An automated pipeline that searches the web for recent AI news, filters results with an LLM, fetches research papers, pulls tweets from key accounts, and delivers a formatted PDF newsletter to your Telegram.
+An automated pipeline that turns a config file into a weekly PDF newsletter — delivered to your Telegram. Fully configurable: define any topic, any search queries, any academic sources, any Twitter accounts to follow. Create as many newsletters as you want by adding config files.
 
 ---
 
 ## How it works
 
-The newsletter is built from three independent modules, each producing a section of the PDF:
+Each newsletter is defined by a single YAML config file. The pipeline has three independent content modules:
 
-1. **News & Analysis** — For each query in your config, [Exa.ai](https://exa.ai) retrieves recent news articles with AI-generated summaries. An LLM (Claude Haiku or GPT-4o-mini) then filters for genuine newsworthiness and deduplicates — if multiple sources cover the same announcement, only the best is kept.
+1. **News & Analysis** — For each search query you define, [Exa.ai](https://exa.ai) retrieves recent web articles with AI-generated summaries. An LLM (Claude Haiku or GPT-4o-mini) filters for genuine newsworthiness and deduplicates — if multiple sources cover the same story, only the best is kept.
 
-2. **Research Papers** — Exa searches academic sources (`arxiv.org`, `nature.com`, `openreview.net`) using your paper queries, restricted by domain. Returns papers published within your recency window with abstract summaries. No LLM filter — domain + query restriction is targeted enough.
+2. **Research Papers** — Exa searches any academic or publication domains you specify, restricted to those sites. Returns papers published within your recency window with abstract summaries. No LLM filter needed — the domain + query restriction is already targeted.
 
-3. **Twitter Highlights** — Fetches real tweets from a configured list of accounts via [getxapi.com](https://www.getxapi.com). Uses advanced search (`from:username since:date -is:reply`) to get only original posts within the recency window. Returns top posts per account ranked by engagement.
+3. **Twitter Highlights** — Fetches real tweets from any list of accounts you configure, via [getxapi.com](https://www.getxapi.com). Returns top posts per account within the recency window, ranked by engagement.
 
-The PDF is rendered with three colour-coded sections and delivered to Telegram. Every run is logged to a local SQLite database.
+The PDF is rendered with three named sections and delivered to Telegram. Every run is logged to a local SQLite database.
 
 ---
 
@@ -196,14 +196,13 @@ PDF:      data/newsletter-ai-research.pdf
 
 ---
 
-## Exa query count per run
+## Exa query cost per run
 
-| Module | Queries |
-|---|---|
-| News (10 queries × 1 call each) | 10 |
-| Papers (4 queries × 1 call each) | 4 |
-| Twitter (19 accounts × 1 call each) | 19 |
-| **Total** | **33** |
+Each module makes one Exa call per item configured:
+
+- **News**: 1 call per `search_queries` entry
+- **Papers**: 1 call per `research_papers.queries` entry
+- **Twitter**: 1 call per `twitter_accounts` entry (via getxapi, $0.001/call)
 
 ---
 
