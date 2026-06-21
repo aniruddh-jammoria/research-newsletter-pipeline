@@ -2,9 +2,7 @@
 .env
 
 # Runtime data
-data/state.db
-data/*.html
-*.pdf
+data/
 
 # Generated output
 test_output/

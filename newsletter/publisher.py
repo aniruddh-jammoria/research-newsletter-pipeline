@@ -1,6 +1,7 @@
 import asyncio
 import io
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,8 +12,28 @@ _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
 
+def _truncate_sentences(text: str, n: int) -> str:
+    """Return first n sentences.
+
+    Split points (in priority order):
+      - .  !  ?  followed by whitespace  (prose sentence boundary)
+      - \\n\\n+                           (paragraph break)
+      - \\n followed by a bullet char     (new bullet point)
+    Single bare \\n is NOT a split point — Exa wraps long lines mid-sentence.
+    """
+    if not text:
+        return ""
+    parts = re.split(r'(?<=[.!?])\s+|\n{2,}|\n(?=\s*[-•*])', text.strip())
+    parts = [p.strip() for p in parts if p.strip()]
+    result = " ".join(parts[:n])
+    if len(parts) > n:
+        result += "..."
+    return result
+
+
 def render_html(newsletter: dict, meta: dict) -> str:
     env = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)))
+    env.filters["truncate_sentences"] = _truncate_sentences
     template = env.get_template("newsletter.html")
     return template.render(newsletter=newsletter, meta=meta)
 
@@ -50,9 +71,11 @@ def run_publisher(newsletter: dict, run_id: str, name: str, cost_usd: float) -> 
 
     meta = {
         "article_count": len(newsletter.get("sections", [])),
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "cost_usd": cost_usd,
-        "run_id": run_id,
+        "paper_count":   len(newsletter.get("papers", [])),
+        "tweet_count":   len(newsletter.get("tweets", [])),
+        "generated_at":  datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "cost_usd":      cost_usd,
+        "run_id":        run_id,
     }
 
     print("[publisher] Rendering HTML...")

@@ -97,13 +97,26 @@ def filter_newsworthiness(
     text, inp, out = llm.complete(fast_model, system, user_msg, max_tokens=8192)
     tracker.add(fast_model, inp, out)
 
-    raw = text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
+    def _parse(raw: str) -> dict:
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        return json.loads(raw.strip())
 
-    result = json.loads(raw)
+    try:
+        result = _parse(text)
+    except json.JSONDecodeError as e:
+        print(f"[research] JSON parse failed ({e}), retrying with fix request...")
+        fix_msg = (
+            f"The following output is invalid JSON. Return only the corrected JSON, "
+            f"no explanation:\n\n{text}"
+        )
+        text2, inp2, out2 = llm.complete(fast_model, system, fix_msg, max_tokens=8192)
+        tracker.add(fast_model, inp2, out2)
+        result = _parse(text2)
+
     keep_urls = {item["url"] for item in result.get("keep", [])}
     drop_count = len(result.get("drop", []))
     print(f"[research] Filter: {len(keep_urls)} kept, {drop_count} dropped")

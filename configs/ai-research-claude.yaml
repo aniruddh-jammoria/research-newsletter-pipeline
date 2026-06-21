@@ -1,15 +1,48 @@
 name: ai-research
 
 search_queries:
-  - LLM foundation model releases benchmarks
-  - AI models and products launch announcements
-  - Model updates product feature releases Anthropic claude
-  - Model updates product feature releases OpenAI ChatGPT
-  - Model updates product feature releases Google Gemini
-  - AI hardware Nvidia GPU infrastructure
+  - AI model releases benchmarks open source weights
+  - Anthropic Claude model updates product features
+  - OpenAI ChatGPT model updates product features
+  - Google Gemini DeepMind model updates AI research
+  - AI hardware Nvidia GPU infrastructure data center
   - AI startup funding investment rounds
-  - AI partnership integration collaboration announcements
-  - AI regulation policy safety and security US EU
+  - AI regulation policy safety US EU
+  - AI agents agentic workflows autonomous systems
+  - Open source AI models Meta LLaMA Mistral community
+  - AI coding developer tools Cursor Copilot Claude Code
+
+research_papers:
+  queries:
+    - LLM reasoning planning alignment safety
+    - multimodal vision language models image video
+    - AI agents autonomous systems tool use
+    - human-agent interaction human-AI collaboration
+  sources:
+    - arxiv.org
+    - nature.com
+    - openreview.net
+
+twitter_accounts:
+  - sama
+  - DarioAmodei
+  - demishassabis
+  - jensenhuang
+  - karpathy
+  - ilyasut
+  - ylecun
+  - jeffdean
+  - drfeifei
+  - AndrewYNg
+  - mustafasuleyman
+  - alexandr_wang
+  - ch402
+  - GaryMarcus
+  - chipro
+  - simonw
+  - hwchase17
+  - emollick
+  - marilynika
 
 recency_days: 7
 num_results: 5

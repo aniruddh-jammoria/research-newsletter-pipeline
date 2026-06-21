@@ -22,15 +22,29 @@
   }
 
   h1 {
-    font-family: Arial, Helvetica, sans-serif;
     font-size: 22pt;
     font-weight: bold;
     color: #0f2d5c;
     margin-bottom: 4px;
   }
 
+  h2 {
+    font-size: 15pt;
+    font-weight: bold;
+    color: #0f2d5c;
+    margin-top: 32px;
+    margin-bottom: 14px;
+  }
+
+  h3 {
+    font-size: 12pt;
+    font-weight: bold;
+    color: #0f2d5c;
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+
   .subtitle {
-    font-family: Arial, Helvetica, sans-serif;
     font-size: 9pt;
     color: #888;
     margin-bottom: 28px;
@@ -41,17 +55,7 @@
     margin: 18px 0;
   }
 
-  h3 {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 12pt;
-    font-weight: bold;
-    color: #0f2d5c;
-    line-height: 1.35;
-    margin-bottom: 4px;
-  }
-
   .meta {
-    font-family: Arial, Helvetica, sans-serif;
     font-size: 8pt;
     color: #999;
     text-transform: uppercase;
@@ -60,20 +64,44 @@
   }
 
   .summary {
-    font-size: 11pt;
+    font-size: 10.5pt;
     color: #2c2c2c;
     margin-bottom: 7px;
   }
 
   .url {
-    font-family: Arial, Helvetica, sans-serif;
     font-size: 8.5pt;
+  }
+
+  .meta-link {
     color: #0f2d5c;
+    text-decoration: none;
+    text-transform: none;
+  }
+
+  /* ── Twitter ───────────────────────────────────────────────────────── */
+
+  .tweet-author {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #1c1c1c;
+    margin-bottom: 6px;
+  }
+
+  .tweet-item {
+    font-size: 10pt;
+    color: #2c2c2c;
+    margin-bottom: 5px;
+    line-height: 1.55;
+  }
+
+  .tweet-item a {
+    font-size: 8pt;
+    color: #3d2060;
   }
 
   .footer {
     margin-top: 32px;
-    font-family: Arial, Helvetica, sans-serif;
     font-size: 8pt;
     color: #aaa;
   }
@@ -82,15 +110,42 @@
 <body>
 
 <h1>Research Newsletter</h1>
-<p class="subtitle">{{ newsletter.newsletter_date }} &nbsp;&bull;&nbsp; {{ meta.article_count }} articles</p>
+<p class="subtitle">{{ newsletter.newsletter_date }} &nbsp;&bull;&nbsp; {{ meta.article_count }} articles{% if meta.paper_count %} &nbsp;&bull;&nbsp; {{ meta.paper_count }} papers{% endif %}{% if meta.tweet_count %} &nbsp;&bull;&nbsp; {{ meta.tweet_count }} tweets{% endif %}</p>
+
+<!-- ── News & Analysis ───────────────────────────────────────────────── -->
+<h2>News &amp; Analysis</h2>
 
 {% for section in newsletter.sections %}
 {% if not loop.first %}<hr>{% endif %}
 <h3>{{ section.headline }}</h3>
-<p class="meta">{{ section.published_date[:10] if section.published_date else "" }} &nbsp;&bull;&nbsp; {{ section.source }}</p>
-<p class="summary">{{ section.summary }}</p>
-<p class="url"><a href="{{ section.url }}" style="color:#0f2d5c;">{{ section.url }}</a></p>
+<p class="meta">{{ section.published_date[:10] if section.published_date else "" }} &nbsp; [<a href="{{ section.url }}" class="meta-link">See article</a>]</p>
+<p class="summary">{{ section.summary | truncate_sentences(4) }}</p>
 {% endfor %}
+
+<!-- ── Research Papers ───────────────────────────────────────────────── -->
+{% if newsletter.papers %}
+<h2>Research Papers</h2>
+
+{% for paper in newsletter.papers %}
+{% if not loop.first %}<hr>{% endif %}
+<h3>{{ paper.title }}</h3>
+<p class="meta">{{ paper.published_date[:10] if paper.published_date else "" }} &nbsp; [<a href="{{ paper.url }}" class="meta-link">See paper</a>]</p>
+<p class="summary">{{ paper.summary | truncate_sentences(4) }}</p>
+{% endfor %}
+{% endif %}
+
+<!-- ── Twitter Highlights ────────────────────────────────────────────── -->
+{% if newsletter.tweets %}
+<h2>Twitter Highlights</h2>
+
+{% for username, user_tweets in newsletter.tweets | groupby("username") %}
+{% if not loop.first %}<hr>{% endif %}
+<p class="tweet-author">@{{ username }}</p>
+{% for tweet in user_tweets %}
+<p class="tweet-item">&#8226;&nbsp;[{{ tweet.published_date[:10] if tweet.published_date else "" }}] {{ tweet.text | truncate_sentences(2) }} &nbsp;<a href="{{ tweet.url }}">See tweet</a></p>
+{% endfor %}
+{% endfor %}
+{% endif %}
 
 <p class="footer">Generated {{ meta.generated_at }} &nbsp;&bull;&nbsp; {{ meta.article_count }} articles &nbsp;&bull;&nbsp; Cost: ${{ "%.4f"|format(meta.cost_usd) }}</p>
 
