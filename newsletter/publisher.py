@@ -1,7 +1,6 @@
 import asyncio
 import io
 import os
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,28 +11,11 @@ _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
 
-def _truncate_sentences(text: str, n: int) -> str:
-    """Return first n sentences.
-
-    Split points (in priority order):
-      - .  !  ?  followed by whitespace  (prose sentence boundary)
-      - \\n\\n+                           (paragraph break)
-      - \\n followed by a bullet char     (new bullet point)
-    Single bare \\n is NOT a split point — Exa wraps long lines mid-sentence.
-    """
-    if not text:
-        return ""
-    parts = re.split(r'(?<=[.!?])\s+|\n{2,}|\n(?=\s*[-•*])', text.strip())
-    parts = [p.strip() for p in parts if p.strip()]
-    result = " ".join(parts[:n])
-    if len(parts) > n:
-        result += "..."
-    return result
-
-
 def render_html(newsletter: dict, meta: dict) -> str:
+    # Nothing is truncated at render time any more: articles and papers are
+    # written to a fixed 100-150 words, tweets to 50-100, so everything the
+    # template receives is already the right length to print in full.
     env = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)))
-    env.filters["truncate_sentences"] = _truncate_sentences
     template = env.get_template("newsletter.html")
     return template.render(newsletter=newsletter, meta=meta)
 
@@ -66,7 +48,7 @@ def send_telegram(pdf_bytes: bytes, filename: str, caption: str) -> None:
     asyncio.run(_send_telegram_async(pdf_bytes, filename, caption, bot_token, chat_id))
 
 
-def run_publisher(newsletter: dict, run_id: str, name: str, cost_usd: float) -> Path:
+def run_publisher(newsletter: dict, run_id: str, output_name: str, cost_usd: float) -> Path:
     _DATA_DIR.mkdir(exist_ok=True)
 
     meta = {
@@ -84,7 +66,7 @@ def run_publisher(newsletter: dict, run_id: str, name: str, cost_usd: float) -> 
     print("[publisher] Generating PDF...")
     pdf_bytes = generate_pdf(html)
 
-    filename = f"newsletter-{name}.pdf"
+    filename = f"{output_name}.pdf"
     pdf_path = _DATA_DIR / filename
     pdf_path.write_bytes(pdf_bytes)
     print(f"[publisher] PDF saved to {pdf_path}")

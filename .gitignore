@@ -3,6 +3,7 @@
 
 # Runtime data
 data/
+logs/
 
 # Generated output
 test_output/
@@ -24,3 +25,7 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Internal files
+Ideas.md
+

@@ -8,6 +8,8 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
+from . import llama_server
+from . import overview as overview_mod
 from . import papers as papers_mod
 from . import publisher, research, state
 from . import twitter as twitter_mod
@@ -20,9 +22,9 @@ _TEST_OUTPUT_DIR = _ROOT / "test_output"
 _DATA_DIR = _ROOT / "data"
 
 
-def _save_cache(run_id: str, name: str, newsletter: dict, cost_usd: float) -> None:
+def _save_cache(run_id: str, output_name: str, newsletter: dict, cost_usd: float) -> None:
     _DATA_DIR.mkdir(exist_ok=True)
-    cache = {"run_id": run_id, "name": name, "cost_usd": cost_usd, "newsletter": newsletter}
+    cache = {"run_id": run_id, "output_name": output_name, "cost_usd": cost_usd, "newsletter": newsletter}
     (_DATA_DIR / f"{run_id}.json").write_text(json.dumps(cache, indent=2), encoding="utf-8")
 
 
@@ -38,29 +40,71 @@ def load_config(config_path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def _build_llm(cfg: dict) -> tuple[LLMClient, str]:
-    provider   = cfg.get("provider", "anthropic")
-    fast_model = cfg.get("fast_model", "claude-haiku-4-5")
+_MODE_SHARED_KEYS = ("provider", "model", "local_base_url", "local_server_exe", "local_model_path", "local_server_args")
+
+
+def _mode_defaults(cfg: dict) -> dict:
+    """Shared defaults for `filter`/`summarize`, derived from top-level `mode` plus
+    any of the shared keys set at the top level. Lets `mode: local` (or `cloud`) plus a
+    single set of local_* keys apply to both blocks, instead of duplicating them twice.
+    Explicit values inside a `filter:`/`summarize:` block always take precedence."""
+    mode = cfg.get("mode")
+    defaults = {}
+    if mode == "cloud":
+        defaults["provider"] = "anthropic"
+    elif mode == "local":
+        defaults["provider"] = "local"
+    elif mode is not None:
+        raise ValueError(f"Unknown mode: {mode!r} — use 'cloud' or 'local'")
+
+    for key in _MODE_SHARED_KEYS:
+        if key in cfg:
+            defaults[key] = cfg[key]
+    return defaults
+
+
+def _resolve_filter_summarize_cfg(cfg: dict) -> tuple[dict, dict]:
+    """Resolve the `filter:` and `summarize:` blocks.
+
+    Every article is summarized from its own page text now, so `summarize` is
+    always needed. Omitting the block reuses the `filter` block as-is.
+    """
+    mode_defaults = _mode_defaults(cfg)
+    filter_cfg = {**mode_defaults, **cfg.get("filter", {})}
+    summarize_cfg = {**mode_defaults, **cfg["summarize"]} if "summarize" in cfg else filter_cfg
+    return filter_cfg, summarize_cfg
+
+
+def _build_llm_for(block: dict) -> tuple[LLMClient, str]:
+    """Build an LLMClient from a `filter:` or `summarize:` config block."""
+    provider = block.get("provider", "anthropic")
+    model    = block.get("model", "claude-haiku-4-5")
 
     if provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise EnvironmentError("OPENAI_API_KEY not set")
-    else:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise EnvironmentError("ANTHROPIC_API_KEY not set")
+        return LLMClient(provider=provider, api_key=api_key), model
 
-    return LLMClient(provider=provider, api_key=api_key), fast_model
+    if provider == "local":
+        base_url = block.get("local_base_url", "http://localhost:8080/v1")
+        return LLMClient(provider=provider, api_key="not-needed", base_url=base_url), model
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise EnvironmentError("ANTHROPIC_API_KEY not set")
+    return LLMClient(provider=provider, api_key=api_key), model
 
 
 def _assemble(
     articles: list[dict],
     papers: list[dict] | None = None,
     tweets: list[dict] | None = None,
+    overview: list[str] | None = None,
 ) -> dict:
     return {
         "newsletter_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "overview": overview or [],
         "sections": [
             {
                 "headline": a["title"],
@@ -93,6 +137,11 @@ def _to_markdown(newsletter: dict, meta: dict) -> str:
         "",
     ]
 
+    if newsletter.get("overview"):
+        lines += ["## This Week's Overview", ""]
+        lines += [f"- {point}" for point in newsletter["overview"]]
+        lines += [""]
+
     for s in newsletter["sections"]:
         lines += [
             "---",
@@ -123,16 +172,14 @@ def _to_markdown(newsletter: dict, meta: dict) -> str:
 
     if newsletter.get("tweets"):
         lines += ["", "---", "", "## Twitter Highlights", ""]
-        current_user = None
         for t in newsletter["tweets"]:
-            if t["username"] != current_user:
-                current_user = t["username"]
-                lines += [f"### @{current_user}", ""]
             lines += [
-                f"*{t['published_date'][:10]}*" if t.get("published_date") else "",
-                t["text"],
+                f"### @{t['username']}",
+                f"*{t.get('tweet_count', 0)} posts*",
                 "",
-                f"[View tweet]({t['url']})",
+                t["summary"],
+                "",
+                f"[View profile]({t['url']})",
                 "",
             ]
 
@@ -150,31 +197,57 @@ def run(config_path: Path) -> dict:
     cfg = load_config(config_path)
     search_queries    = cfg["search_queries"]
     recency_days      = cfg.get("recency_days", 7)
-    num_results       = cfg.get("num_results", 10)
+    news_results      = cfg.get("news_results", 5)
+    paper_results     = cfg.get("paper_results", 5)
     name              = cfg.get("name", config_path.stem)
+    file_name         = cfg.get("file_name", name)
     paper_queries, paper_sources = _parse_papers_cfg(cfg)
     twitter_accounts  = cfg.get("twitter_accounts", [])
 
-    llm, fast_model = _build_llm(cfg)
+    filter_cfg, summarize_cfg = _resolve_filter_summarize_cfg(cfg)
+
+    filter_llm, filter_model       = _build_llm_for(filter_cfg)
+    summarize_llm, summarize_model = _build_llm_for(summarize_cfg)
+
     run_id = f"{name}-{uuid.uuid4().hex[:6]}"
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    output_name = f"{file_name}_{date_str}"
     print(f"\n=== Newsletter run: {run_id} ===")
-    print(f"Provider: {cfg.get('provider', 'anthropic')} | Model: {fast_model}\n")
+    print(f"Filter:    {filter_cfg.get('provider', 'anthropic')} | {filter_model}")
+    print(f"Summarize: {summarize_cfg.get('provider', 'anthropic')} | {summarize_model}")
+    print()
 
     state.start_run(run_id)
     tracker = CostTracker()
 
+    started_urls = [url for url in (
+        llama_server.ensure_running(filter_cfg),
+        llama_server.ensure_running(summarize_cfg),
+    ) if url is not None]
+
     try:
-        articles = research.run_research(search_queries, recency_days, num_results, llm, fast_model, tracker)
+        articles = research.run_research(
+            search_queries, recency_days, news_results, filter_llm, filter_model, tracker,
+            summarize_llm=summarize_llm, summarize_model=summarize_model,
+            run_id=run_id,
+        )
         if not articles:
             raise RuntimeError("No articles passed the newsworthiness filter")
 
-        papers = papers_mod.run_papers(paper_queries, paper_sources, recency_days) if paper_queries else []
-        tweets = twitter_mod.run_twitter(twitter_accounts, recency_days) if twitter_accounts else []
+        papers = papers_mod.run_papers(
+            paper_queries, paper_sources, recency_days, num_results=paper_results,
+            summarize_llm=summarize_llm, summarize_model=summarize_model,
+            tracker=tracker,
+        ) if paper_queries else []
+        tweets = twitter_mod.run_twitter(
+            twitter_accounts, recency_days, summarize_llm, summarize_model, tracker,
+        ) if twitter_accounts else []
+        overview = overview_mod.generate(articles, summarize_llm, summarize_model, tracker)
 
-        newsletter = _assemble(articles, papers, tweets)
+        newsletter = _assemble(articles, papers, tweets, overview)
         summary = tracker.summary()
-        _save_cache(run_id, name, newsletter, summary["cost_usd"])
-        pdf_path = publisher.run_publisher(newsletter, run_id, name, summary["cost_usd"])
+        _save_cache(run_id, output_name, newsletter, summary["cost_usd"])
+        pdf_path = publisher.run_publisher(newsletter, run_id, output_name, summary["cost_usd"])
 
         state.finish_run(
             run_id, status="success",
@@ -196,37 +269,65 @@ def run(config_path: Path) -> dict:
         state.finish_run(run_id, status="failed", error=str(e))
         print(f"\n[pipeline] Run {run_id} failed: {e}")
         raise
+    finally:
+        for url in started_urls:
+            llama_server.stop(url)
 
 
 def run_test(config_path: Path) -> dict:
     cfg = load_config(config_path)
     search_queries    = cfg["search_queries"]
     recency_days      = cfg.get("recency_days", 7)
-    num_results       = cfg.get("num_results", 10)
+    news_results      = cfg.get("news_results", 5)
+    paper_results     = cfg.get("paper_results", 5)
     name              = cfg.get("name", config_path.stem)
+    file_name         = cfg.get("file_name", name)
     paper_queries, paper_sources = _parse_papers_cfg(cfg)
     twitter_accounts  = cfg.get("twitter_accounts", [])
 
-    llm, fast_model = _build_llm(cfg)
+    filter_cfg, summarize_cfg = _resolve_filter_summarize_cfg(cfg)
+
+    filter_llm, filter_model       = _build_llm_for(filter_cfg)
+    summarize_llm, summarize_model = _build_llm_for(summarize_cfg)
+
     date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
-    run_id = f"{name}-test-{date_str}"
+    run_id = f"{name}-test-{date_str}-{uuid.uuid4().hex[:6]}"
+    output_name = f"{file_name}_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
     print(f"\n=== TEST RUN: {run_id} ===")
-    print(f"Provider: {cfg.get('provider', 'anthropic')} | Model: {fast_model}\n")
+    print(f"Filter:    {filter_cfg.get('provider', 'anthropic')} | {filter_model}")
+    print(f"Summarize: {summarize_cfg.get('provider', 'anthropic')} | {summarize_model}")
+    print()
 
     state.start_run(run_id)
     tracker = CostTracker()
 
+    started_urls = [url for url in (
+        llama_server.ensure_running(filter_cfg),
+        llama_server.ensure_running(summarize_cfg),
+    ) if url is not None]
+
     try:
-        articles = research.run_research(search_queries, recency_days, num_results, llm, fast_model, tracker)
+        articles = research.run_research(
+            search_queries, recency_days, news_results, filter_llm, filter_model, tracker,
+            summarize_llm=summarize_llm, summarize_model=summarize_model,
+            run_id=run_id,
+        )
         if not articles:
             raise RuntimeError("No articles passed the newsworthiness filter")
 
-        papers = papers_mod.run_papers(paper_queries, paper_sources, recency_days) if paper_queries else []
-        tweets = twitter_mod.run_twitter(twitter_accounts, recency_days) if twitter_accounts else []
+        papers = papers_mod.run_papers(
+            paper_queries, paper_sources, recency_days, num_results=paper_results,
+            summarize_llm=summarize_llm, summarize_model=summarize_model,
+            tracker=tracker,
+        ) if paper_queries else []
+        tweets = twitter_mod.run_twitter(
+            twitter_accounts, recency_days, summarize_llm, summarize_model, tracker,
+        ) if twitter_accounts else []
+        overview = overview_mod.generate(articles, summarize_llm, summarize_model, tracker)
 
-        newsletter = _assemble(articles, papers, tweets)
+        newsletter = _assemble(articles, papers, tweets, overview)
         summary = tracker.summary()
-        _save_cache(run_id, name, newsletter, summary["cost_usd"])
+        _save_cache(run_id, output_name, newsletter, summary["cost_usd"])
         meta = {
             "run_id":        run_id,
             "generated_at":  datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -260,18 +361,21 @@ def run_test(config_path: Path) -> dict:
         state.finish_run(run_id, status="failed", error=str(e))
         print(f"\n[pipeline] Run {run_id} failed: {e}")
         raise
+    finally:
+        for url in started_urls:
+            llama_server.stop(url)
 
 
 def run_rerun(run_id: str) -> dict:
     cache = _load_cache(run_id)
-    newsletter = cache["newsletter"]
-    name       = cache["name"]
-    cost_usd   = cache["cost_usd"]
+    newsletter  = cache["newsletter"]
+    output_name = cache["output_name"]
+    cost_usd    = cache["cost_usd"]
 
     print(f"\n=== Re-publishing: {run_id} ===")
     print(f"Articles: {len(newsletter.get('sections', []))} | Papers: {len(newsletter.get('papers', []))} | Tweets: {len(newsletter.get('tweets', []))}")
 
-    pdf_path = publisher.run_publisher(newsletter, run_id, name, cost_usd)
+    pdf_path = publisher.run_publisher(newsletter, run_id, output_name, cost_usd)
     print(f"PDF: {pdf_path}")
     return {"run_id": run_id, "pdf_path": str(pdf_path)}
 

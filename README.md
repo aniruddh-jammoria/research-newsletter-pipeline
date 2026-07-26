@@ -1,257 +1,213 @@
 # Research Newsletter Pipeline
 
-An automated pipeline that turns a config file into a weekly PDF newsletter — delivered to your Telegram. Fully configurable: define any topic, any search queries, any academic sources, any Twitter accounts to follow. Create as many newsletters as you want by adding config files.
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![LLM: Claude / GPT / local](https://img.shields.io/badge/LLM-Claude%20%7C%20GPT%20%7C%20local-8A2BE2)
 
----
+Turns a YAML file into a weekly PDF newsletter, delivered to your Telegram.
+
+Staying current on a fast-moving field means either paying for a newsletter that covers
+someone else's interests, or doing the sifting yourself every week. This does the sifting:
+you define the topic, the sources and the accounts to follow, and each run searches, removes
+duplicate coverage, discards the filler, writes its own summaries, and delivers a PDF. Define
+as many newsletters as you want by adding config files — and run the whole reasoning half on
+your own hardware, so a weekly issue costs cents or nothing at all.
+
+## Demo
+
+<!-- TODO: add screenshot/demo of a rendered PDF -->
 
 ## How it works
 
-Each newsletter is defined by a single YAML config file. The pipeline has three independent content modules:
+1. **You provide** a YAML file — search queries, academic domains, Twitter accounts — plus API
+   keys in `.env`.
+2. **Retrieval:** [Exa](https://exa.ai) searches news and papers; [getxapi](https://www.getxapi.com)
+   fetches posts. Both return the page text alongside each result.
+3. **Summarization:** your chosen model condenses every article and paper to a neutral 100-150
+   words, and each account's week of posts to 50-100 words. Titles are cleaned in the same pass.
+4. **Filtering (news only):** one pass removes duplicate coverage of the same event, keeping the
+   most authoritative source; a second judges what remains on its own merits.
+5. **Output:** a PDF with an up-to-5-bullet overview, three sections, and delivery to Telegram.
+   Every run is logged to SQLite and cached so it can be re-rendered for free.
 
-1. **News & Analysis** — For each search query you define, [Exa.ai](https://exa.ai) retrieves recent web articles with AI-generated summaries. An LLM (Claude Haiku or GPT-4o-mini) filters for genuine newsworthiness and deduplicates — if multiple sources cover the same story, only the best is kept.
+The reasoning steps in 3 and 4 are the part that would otherwise cost money on every run.
+Point them at Anthropic, OpenAI, or your own llama.cpp server — independently, per step.
 
-2. **Research Papers** — Exa searches any academic or publication domains you specify, restricted to those sites. Returns papers published within your recency window with abstract summaries. No LLM filter needed — the domain + query restriction is already targeted.
-
-3. **Twitter Highlights** — Fetches real tweets from any list of accounts you configure, via [getxapi.com](https://www.getxapi.com). Returns top posts per account within the recency window, ranked by engagement.
-
-The PDF is rendered with three named sections and delivered to Telegram. Every run is logged to a local SQLite database.
-
----
-
-## Project structure
-
-```
-research-newsletter-pipeline/
-├── configs/                  # One YAML file per newsletter
-│   └── ai-research-claude.yaml
-├── newsletter/
-│   ├── pipeline.py           # Orchestrator — entry point
-│   ├── research.py           # Exa search + LLM newsworthiness filter (news)
-│   ├── papers.py             # Exa search for academic papers
-│   ├── twitter.py            # getxapi Twitter/X integration
-│   ├── llm.py                # Provider-agnostic wrapper (Anthropic / OpenAI)
-│   ├── publisher.py          # PDF generation + Telegram delivery
-│   ├── cost.py               # Token and cost tracking
-│   └── state.py              # SQLite run history
-├── prompts/
-│   └── newsworthiness.md     # Instructions for the news filter LLM
-├── schema/
-│   └── init.sql              # SQLite schema
-├── test_output/              # Markdown previews from --test runs
-├── data/                     # Generated PDFs and state.db (gitignored)
-├── .env.example              # API key template
-├── UPDATE_LOG.md             # Changelog of pipeline improvements
-└── requirements.txt
-```
-
----
-
-## Prerequisites
-
-- Python 3.11+
-- API keys for:
-  - [Exa.ai](https://exa.ai) — news and paper search
-  - [Anthropic](https://console.anthropic.com) and/or [OpenAI](https://platform.openai.com) — LLM filtering
-  - [getxapi.com](https://www.getxapi.com) — Twitter/X (free tier: $0.10 credit on signup)
-  - Telegram bot — delivery (see setup below)
-
----
-
-## Setup
-
-### 1. Clone and install dependencies
+## Quick start
 
 ```bash
-git clone https://github.com/your-username/research-newsletter-pipeline.git
+git clone https://github.com/aniruddh-jammoria/research-newsletter-pipeline.git
 cd research-newsletter-pipeline
 pip install -r requirements.txt
 ```
 
-### 2. Configure API keys
-
-Copy `.env.example` to `.env` and fill in your keys:
-
-```bash
-cp .env.example .env
-```
-
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...          # only needed if using OpenAI models
-EXA_API_KEY=...
-GETXAPI_KEY=...
-
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_CHAT_ID=...
-```
-
-**Getting a Telegram bot:**
-1. Message [@BotFather](https://t.me/BotFather) on Telegram and send `/newbot`
-2. Copy the token it gives you → `TELEGRAM_BOT_TOKEN`
-3. Start a conversation with your new bot, then open `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` in a browser and copy the `chat.id` value → `TELEGRAM_CHAT_ID`
-
-### 3. Create a newsletter config
-
-Create a YAML file in `configs/`. Full example:
-
-```yaml
-name: ai-research
-
-# News & Analysis — each query is a separate Exa search
-search_queries:
-  - AI model releases benchmarks open source weights
-  - Anthropic Claude model updates product features
-  - OpenAI ChatGPT model updates product features
-  - Google Gemini DeepMind model updates AI research
-  - AI hardware Nvidia GPU infrastructure data center
-  - AI startup funding investment rounds
-  - AI regulation policy safety US EU
-  - AI agents agentic workflows autonomous systems
-  - Open source AI models Meta LLaMA Mistral community
-  - AI coding developer tools Cursor Copilot Claude Code
-
-# Research Papers — domain-restricted Exa search
-research_papers:
-  queries:
-    - LLM reasoning planning alignment safety
-    - multimodal vision language models image video
-    - AI agents autonomous systems tool use
-    - human-agent interaction human-AI collaboration
-  sources:
-    - arxiv.org
-    - nature.com
-    - openreview.net
-
-# Twitter — real tweets fetched via getxapi.com
-twitter_accounts:
-  - sama
-  - DarioAmodei
-  - karpathy
-  - ylecun
-  - emollick
-  - simonw
-
-recency_days: 7       # fetch content from the last N days
-num_results: 5        # results per news query (before LLM filter)
-
-provider: anthropic
-fast_model: claude-haiku-4-5
-```
-
----
-
-## Running
-
-### Dry run (recommended first)
-
-Saves a Markdown preview to `test_output/` — no PDF, no Telegram message:
+Get API keys: [Exa](https://exa.ai) (search), [Anthropic](https://console.anthropic.com) or
+[OpenAI](https://platform.openai.com) (skip if running fully local),
+[getxapi](https://www.getxapi.com) (Twitter, optional), and a Telegram bot — message
+[@BotFather](https://t.me/BotFather), send `/newbot`, then open
+`https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` to find your `chat.id`.
 
 ```bash
-python -m newsletter.pipeline --test configs/ai-research-claude.yaml
+cp .env.example .env    # then fill in your keys
+cp examples/cloud.yaml configs/my-newsletter.yaml
 ```
 
-### Full run (PDF + Telegram)
+Edit `search_queries` to your topic, then dry-run it — this writes a Markdown preview to
+`test_output/` with no PDF and no Telegram message:
 
 ```bash
-# Single config
-python -m newsletter.pipeline configs/ai-research-claude.yaml
+python -m newsletter.pipeline --test configs/my-newsletter.yaml
+```
 
-# All configs in configs/
+Once it looks right, run it for real:
+
+```bash
+python -m newsletter.pipeline configs/my-newsletter.yaml
+```
+
+Prefer to run entirely on your own hardware? Start from [`examples/local.yaml`](examples/local.yaml)
+and see [docs/RUNNING-LOCALLY.md](docs/RUNNING-LOCALLY.md).
+
+## Usage
+
+**Run every newsletter.** Each YAML file in `configs/` is a separate newsletter; no arguments
+discovers and runs all of them:
+
+```bash
 python -m newsletter.pipeline
 ```
 
-### Re-publish a cached run
-
-Every successful run saves the assembled content to `data/{run_id}.json`. To re-render and re-deliver without repeating any searches or LLM calls:
+**Re-publish a cached run.** Every successful run saves its assembled content, so you can
+re-render and re-deliver without repeating any searches or LLM calls — useful when iterating on
+formatting, since it costs nothing and takes seconds. The run ID is printed at the start of
+every run:
 
 ```bash
 python -m newsletter.pipeline --rerun ai-research-c66710
 ```
 
-The run ID is printed at the start of every run. Use this when iterating on template or formatting changes — it costs nothing and takes a few seconds.
-
-
-### Example output
+**Schedule it weekly.** See [docs/SCHEDULING.md](docs/SCHEDULING.md) — a Windows Task Scheduler
+entry that runs in local time, survives daylight saving, and can wake the machine.
 
 ```
 === Newsletter run: ai-research-abc123 ===
-Provider: anthropic | Model: claude-haiku-4-5
+Filter:    local | gemma-4-26B-A4B-it
+Summarize: local | gemma-4-26B-A4B-it
 
-[research] Running 10 queries (recency: 7d, 5 results each)
-[research] 42 unique articles found
-[research] Filter: 18 kept, 24 dropped
-
-[papers] Searching 4 queries on ['arxiv.org', 'nature.com', 'openreview.net']
-[papers] 17 unique papers found
-
-[twitter] Fetching tweets for 19 accounts via getxapi (since 2026-06-14)
-[twitter] 25 tweets found
+[research] 50 unique articles found
+[research] 50 in / 50 summarized in 18:23 (22.1s each) — Exa text: 50, scraped: 0, no content: 0 (0.0%), titles cleaned: 31
+[research] Dedup:  37 kept, 13 dropped
+[research] Filter: 27 kept, 10 dropped
+[papers]   18 unique papers found
+[twitter]  14 account(s) summarized (2 silent, 3 nothing notable)
+[overview] 5 bullet(s) written
 
 === Done: ai-research-abc123 ===
-Articles: 18 | Papers: 17 | Tweets: 25
-Tokens:   4821 in / 612 out
-Cost:     $0.0079
-PDF:      data/newsletter-ai-research.pdf
+Articles: 27 | Papers: 18 | Accounts: 14
+Cost:     $0.0000
+PDF:      data/ai-research_2026-07-26.pdf
 ```
 
----
+## Configuration & customization
 
-## Exa query cost per run
-
-Each module makes one Exa call per item configured:
-
-- **News**: 1 call per `search_queries` entry
-- **Papers**: 1 call per `research_papers.queries` entry
-- **Twitter**: 1 call per `twitter_accounts` entry (via getxapi, $0.001/call)
-
----
-
-## Using OpenAI models
+Each newsletter is one YAML file in `configs/`:
 
 ```yaml
-provider: openai
-fast_model: gpt-4o-mini
+name: ai-research
+file_name: ai-research   # output is {file_name}_{YYYY-MM-DD}.pdf
+
+search_queries:                      # one Exa search each
+  - AI model releases benchmarks open source weights
+  - AI agents agentic workflows autonomous systems
+
+research_papers:                     # domain-restricted search
+  queries:
+    - LLM reasoning planning alignment safety
+  sources: [arxiv.org, nature.com, openreview.net]
+
+twitter_accounts: [sama, karpathy]   # every post in the window is summarized
+
+recency_days: 7        # how far back to look
+news_results: 5        # per search_queries entry
+paper_results: 5       # per research_papers.queries entry
+
+mode: cloud            # or "local" — sets the default provider for both steps below
+model: claude-haiku-4-5
+
+filter: {}             # inherits provider/model from mode
+# summarize: {}        # omit to reuse the filter block
 ```
 
-Make sure `OPENAI_API_KEY` is set in `.env`.
+`filter` and `summarize` are independent — set `provider`/`model` inside either to override
+what `mode` supplies, so you can filter on cheap cloud Claude while summarizing locally, or any
+other mix. For OpenAI, use `provider: openai` with `model: gpt-4o-mini` and set `OPENAI_API_KEY`.
 
----
+**Prompts.** Every LLM step reads editable instructions from `prompts/` — nothing is hardcoded.
+Edit [`summarize.md`](prompts/summarize.md), [`deduplication.md`](prompts/deduplication.md),
+[`newsworthiness.md`](prompts/newsworthiness.md), [`tweet_summary.md`](prompts/tweet_summary.md)
+or [`overview.md`](prompts/overview.md) to change how strict, lenient or verbose that stage is.
 
-## Multiple newsletters
+**Templates.** The PDF layout is a single Jinja2 template at
+`newsletter/templates/newsletter.html`.
 
-Create one YAML file per newsletter in `configs/`. Running without arguments discovers and runs all of them:
+See [`examples/cloud.yaml`](examples/cloud.yaml) and [`examples/local.yaml`](examples/local.yaml)
+for complete, ready-to-copy configs, and [docs/PIPELINE.md](docs/PIPELINE.md) for what each stage
+actually does and what a run costs.
 
-```bash
-python -m newsletter.pipeline
+## Architecture
+
+Retrieval is unavoidably networked — there is no way to search the live web or fetch posts
+without querying someone's index. Reasoning is not:
+
+```
+RETRIEVAL — always networked
+Exa (news + papers)  ·  getxapi (posts)
+                    |
+                    v
+REASONING — your choice, per step
+summarizing · deduplicating · judging newsworthiness
+   mode: cloud  ->  Anthropic / OpenAI   (pay per token)
+   mode: local  ->  your llama.cpp server (free, private)
 ```
 
----
-
-## Customising the filter
-
-Edit `prompts/newsworthiness.md` to change what the LLM considers newsworthy — topics to include/exclude, how to handle duplicate coverage, etc. This only applies to the News section; papers and tweets are not LLM-filtered.
-
----
-
-## Run history
-
-Every run is logged to `data/state.db` (SQLite):
-
-```bash
-sqlite3 data/state.db "SELECT run_id, status, article_count, cost_usd FROM runs ORDER BY started_at DESC LIMIT 10;"
 ```
+newsletter/
+├── pipeline.py       # Orchestrator — entry point
+├── research.py       # News search, dedup, newsworthiness filter
+├── papers.py         # Academic paper search
+├── twitter.py        # Post fetching + per-account summaries
+├── summarize.py      # Page text -> 100-150 word summary + clean title
+├── overview.py       # The opening bullets
+├── urls.py           # Same-document URL identity (arXiv forms, tracking params)
+├── llm.py            # Provider-agnostic wrapper (Anthropic / OpenAI / local)
+├── llama_server.py   # Auto start/stop for local llama.cpp servers
+├── prompts.py        # Prompt loading
+├── publisher.py      # PDF generation + Telegram delivery
+├── cost.py           # Token and cost tracking
+└── state.py          # SQLite run history
 
----
-
-## Tech stack
+configs/    # One YAML per newsletter (auto-discovered)
+examples/   # Ready-to-copy cloud and local templates
+prompts/    # Editable instructions for every LLM step
+scripts/    # Scheduled-run wrapper and task registration
+docs/       # Pipeline detail, local models, scheduling
+```
 
 | Component | Technology |
 |---|---|
-| News search | [Exa.ai](https://exa.ai) neural search |
-| Paper search | [Exa.ai](https://exa.ai) with domain restriction |
-| Twitter/X | [getxapi.com](https://www.getxapi.com) ($0.001/call) |
-| LLM filtering | Anthropic Claude Haiku / OpenAI GPT-4o-mini |
-| PDF generation | xhtml2pdf + Jinja2 |
+| News & paper search | [Exa](https://exa.ai) neural search |
+| Twitter/X | [getxapi](https://www.getxapi.com) |
+| Reasoning | Anthropic Claude / OpenAI GPT / local llama.cpp |
+| Scrape fallback | trafilatura |
+| PDF | xhtml2pdf + Jinja2 |
 | Delivery | python-telegram-bot |
 | Run history | SQLite |
-| Config | YAML |
+
+## Changelog & development notes
+
+See [`Changelog.md`](Changelog.md) for what changed, why it mattered, and what impact it had.
+Contributor and agent instructions live in [`CLAUDE.md`](CLAUDE.md).
+
+## License
+
+[MIT](LICENSE)

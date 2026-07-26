@@ -4,7 +4,7 @@ import time
 
 
 class LLMClient:
-    def __init__(self, provider: str, api_key: str) -> None:
+    def __init__(self, provider: str, api_key: str, base_url: str | None = None) -> None:
         self.provider = provider.lower()
         if self.provider == "anthropic":
             import anthropic
@@ -12,8 +12,13 @@ class LLMClient:
         elif self.provider == "openai":
             from openai import OpenAI
             self._client = OpenAI(api_key=api_key)
+        elif self.provider == "local":
+            # llama.cpp's llama-server exposes an OpenAI-compatible /v1/chat/completions
+            # endpoint, so the OpenAI client works unmodified against it.
+            from openai import OpenAI
+            self._client = OpenAI(base_url=base_url or "http://localhost:8080/v1", api_key=api_key or "not-needed")
         else:
-            raise ValueError(f"Unsupported provider: {provider!r}. Choose 'anthropic' or 'openai'.")
+            raise ValueError(f"Unsupported provider: {provider!r}. Choose 'anthropic', 'openai', or 'local'.")
 
     def complete(
         self,
@@ -45,7 +50,7 @@ class LLMClient:
             )
             return response.content[0].text, response.usage.input_tokens, response.usage.output_tokens
 
-        elif self.provider == "openai":
+        elif self.provider in ("openai", "local"):
             response = self._client.chat.completions.create(
                 model=model,
                 max_tokens=max_tokens,
@@ -54,4 +59,7 @@ class LLMClient:
                     {"role": "user", "content": user},
                 ],
             )
-            return response.choices[0].message.content, response.usage.prompt_tokens, response.usage.completion_tokens
+            usage = response.usage
+            input_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+            output_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+            return response.choices[0].message.content, input_tokens, output_tokens

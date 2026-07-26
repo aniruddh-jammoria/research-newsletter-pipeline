@@ -69,8 +69,23 @@
     margin-bottom: 7px;
   }
 
-  .url {
-    font-size: 8.5pt;
+  /* ── This Week's Overview ──────────────────────────────────────────── */
+
+  h2.overview-heading {
+    margin-top: 10px;
+  }
+
+  /* Hanging indent sized to the bullet prefix itself. At 10.5pt Arial the
+     bullet plus its non-breaking space measures 6.6pt, so pulling the first
+     line back by exactly that lands wrapped lines flush with the first line's
+     text. xhtml2pdf's own <ul> wraps back to the marker instead of the text,
+     which is why this is a paragraph. Re-measure if the body size changes. */
+  .overview-item {
+    font-size: 10.5pt;
+    color: #2c2c2c;
+    line-height: 1.55;
+    margin: 0 0 0 18.6pt;
+    text-indent: -6.6pt;
   }
 
   .meta-link {
@@ -89,15 +104,16 @@
   }
 
   .tweet-item {
-    font-size: 10pt;
+    font-size: 10.5pt;
     color: #2c2c2c;
-    margin-bottom: 5px;
     line-height: 1.55;
+    margin-bottom: 7px;
   }
 
-  .tweet-item a {
+  .tweet-profile {
     font-size: 8pt;
     color: #3d2060;
+    font-weight: normal;
   }
 
   .footer {
@@ -112,6 +128,14 @@
 <h1>Research Newsletter</h1>
 <p class="subtitle">{{ newsletter.newsletter_date }} &nbsp;&bull;&nbsp; {{ meta.article_count }} articles{% if meta.paper_count %} &nbsp;&bull;&nbsp; {{ meta.paper_count }} papers{% endif %}{% if meta.tweet_count %} &nbsp;&bull;&nbsp; {{ meta.tweet_count }} tweets{% endif %}</p>
 
+<!-- ── This Week's Overview ──────────────────────────────────────────── -->
+{% if newsletter.overview %}
+<h2 class="overview-heading">This Week's Overview</h2>
+{% for point in newsletter.overview %}
+<p class="overview-item">&#8226;&nbsp;{{ point }}</p>
+{% endfor %}
+{% endif %}
+
 <!-- ── News & Analysis ───────────────────────────────────────────────── -->
 <h2>News &amp; Analysis</h2>
 
@@ -119,7 +143,7 @@
 {% if not loop.first %}<hr>{% endif %}
 <h3>{{ section.headline }}</h3>
 <p class="meta">{{ section.published_date[:10] if section.published_date else "" }} &nbsp; [<a href="{{ section.url }}" class="meta-link">See article</a>]</p>
-<p class="summary">{{ section.summary | truncate_sentences(4) }}</p>
+<p class="summary">{{ section.summary }}</p>
 {% endfor %}
 
 <!-- ── Research Papers ───────────────────────────────────────────────── -->
@@ -130,7 +154,7 @@
 {% if not loop.first %}<hr>{% endif %}
 <h3>{{ paper.title }}</h3>
 <p class="meta">{{ paper.published_date[:10] if paper.published_date else "" }} &nbsp; [<a href="{{ paper.url }}" class="meta-link">See paper</a>]</p>
-<p class="summary">{{ paper.summary | truncate_sentences(4) }}</p>
+<p class="summary">{{ paper.summary }}</p>
 {% endfor %}
 {% endif %}
 
@@ -138,12 +162,10 @@
 {% if newsletter.tweets %}
 <h2>Twitter Highlights</h2>
 
-{% for username, user_tweets in newsletter.tweets | groupby("username") %}
+{% for account in newsletter.tweets %}
 {% if not loop.first %}<hr>{% endif %}
-<p class="tweet-author">@{{ username }}</p>
-{% for tweet in user_tweets %}
-<p class="tweet-item">&#8226;&nbsp;[{{ tweet.published_date[:10] if tweet.published_date else "" }}] {{ tweet.text | truncate_sentences(2) }} &nbsp;<a href="{{ tweet.url }}">See tweet</a></p>
-{% endfor %}
+<p class="tweet-author">@{{ account.username }} &nbsp;<a href="{{ account.url }}" class="tweet-profile">{{ account.tweet_count }} post{{ "s" if account.tweet_count != 1 }}</a></p>
+<p class="tweet-item">{{ account.summary }}</p>
 {% endfor %}
 {% endif %}
 

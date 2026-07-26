@@ -1,0 +1,46 @@
+# ── Cloud mode ────────────────────────────────────────────────────────────
+# The simplest way to run this pipeline: no local hardware, no model files —
+# just an Exa key and an Anthropic (or OpenAI) key. Copy this into configs/
+# and you have a working newsletter in a couple of minutes.
+#
+# To try it:
+#   python -m newsletter.pipeline --test examples/cloud.yaml
+
+name: example-cloud
+file_name: example-cloud
+
+# `mode: cloud` sets the default provider for both the filter and summarize
+# steps to Anthropic. `model` here is shared by both steps unless you give
+# either one its own `model:` inside filter:/summarize: below.
+mode: cloud
+model: claude-haiku-4-5
+
+search_queries:
+  - AI model releases benchmarks open source weights
+  - AI startup funding investment rounds
+  - AI regulation policy safety US EU
+
+research_papers:
+  queries:
+    - LLM reasoning planning alignment safety
+  sources:
+    - arxiv.org
+    - nature.com
+
+recency_days: 7
+
+# Results fetched per item, before any filtering. Each section has its own knob.
+# Twitter has none: every post an account made in the window is summarized.
+news_results: 5    # per search_queries entry
+paper_results: 5   # per research_papers.queries entry
+
+# Nothing more to configure — `filter:` inherits provider/model from `mode`
+# and the shared `model:` key above. `summarize:` is omitted, so it reuses the
+# filter block; add one only if you want summaries written by a different
+# provider or model than the one doing the keep/drop decisions.
+filter: {}
+
+# To use OpenAI instead, replace mode/model with:
+#   filter:
+#     provider: openai
+#     model: gpt-4o-mini
