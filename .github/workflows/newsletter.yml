@@ -1,13 +1,18 @@
 name: Research Newsletter Pipeline
 
+# The weekly schedule lives in Windows Task Scheduler, not here — see
+# scripts/register-task.ps1 and README > "Scheduling the weekly run".
+# Actions cron is UTC-only with no DST awareness, so a fixed cron drifts by an
+# hour twice a year in any DST-observing timezone; Task Scheduler follows the
+# local clock. This workflow is kept for manual runs only.
 on:
-  schedule:
-    - cron: '0 9 * * 1'   # 09:00 UTC every Monday
   workflow_dispatch:        # Manual trigger from the GitHub Actions UI
 
 jobs:
   run-newsletter:
-    runs-on: ubuntu-latest
+    # Requires a self-hosted runner registered on the machine that has
+    # llama-server and the model files. See README > "Running locally".
+    runs-on: [self-hosted, Windows]
 
     steps:
       - name: Checkout repository
@@ -21,6 +26,15 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Check local LLM server reachability
+        shell: bash
+        run: |
+          if curl -sf http://localhost:8080/v1/models >/dev/null 2>&1; then
+            echo "llama-server reachable at localhost:8080"
+          else
+            echo "::warning::llama-server not reachable at localhost:8080 — start it before this job runs if any config uses provider: local"
+          fi
 
       - name: Run newsletter pipeline
         run: python -m newsletter.pipeline
