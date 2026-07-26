@@ -93,6 +93,10 @@ One extra call after filtering produces the up-to-5 bullet opener, seeing only a
 made the newsletter. It is non-fatal by design: on failure the run logs it and continues, and
 the section is omitted.
 
+The same bullets are sent to Telegram with the PDF, so the summary is readable without opening
+the attachment. Telegram caps a media caption at 1024 characters; when the bullets do not fit,
+they are sent as a separate follow-up message rather than truncated.
+
 ## Twitter
 
 Every post an account made in the window is read together and condensed into one 50-100 word

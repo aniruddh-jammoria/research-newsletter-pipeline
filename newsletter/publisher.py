@@ -10,6 +10,36 @@ from xhtml2pdf import pisa
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
+# Telegram limits: 1024 characters on a media caption, 4096 on a text message.
+# Five bullets at the length prompts/overview.md allows can exceed the caption
+# limit, which would fail the send outright — so the overview moves to its own
+# message when it does not fit rather than being cut off or lost.
+_CAPTION_LIMIT = 1024
+_MESSAGE_LIMIT = 4096
+
+
+def _build_message(newsletter: dict, meta: dict, cost_usd: float) -> tuple[str, str | None]:
+    """Return (caption for the PDF, optional follow-up message).
+
+    The overview rides in the caption whenever it fits, so the summary and the
+    file arrive as one notification.
+    """
+    header = (
+        f"Research Newsletter — {newsletter.get('newsletter_date', 'today')}\n"
+        f"{meta['article_count']} articles | Cost: ${cost_usd:.4f}"
+    )
+
+    bullets = [b.strip() for b in (newsletter.get("overview") or []) if b and b.strip()]
+    if not bullets:
+        return header, None
+
+    overview = "\n\n".join(f"• {b}" for b in bullets)
+    combined = f"{header}\n\n{overview}"
+    if len(combined) <= _CAPTION_LIMIT:
+        return combined, None
+
+    return header, overview[:_MESSAGE_LIMIT]
+
 
 def render_html(newsletter: dict, meta: dict) -> str:
     # Nothing is truncated at render time any more: articles and papers are
@@ -28,7 +58,14 @@ def generate_pdf(html: str) -> bytes:
     return buf.getvalue()
 
 
-async def _send_telegram_async(pdf_bytes: bytes, filename: str, caption: str, bot_token: str, chat_id: str) -> None:
+async def _send_telegram_async(
+    pdf_bytes: bytes,
+    filename: str,
+    caption: str,
+    bot_token: str,
+    chat_id: str,
+    follow_up: str | None = None,
+) -> None:
     from telegram import Bot
     bot = Bot(token=bot_token)
     await bot.send_document(
@@ -37,15 +74,17 @@ async def _send_telegram_async(pdf_bytes: bytes, filename: str, caption: str, bo
         filename=filename,
         caption=caption,
     )
+    if follow_up:
+        await bot.send_message(chat_id=chat_id, text=follow_up)
 
 
-def send_telegram(pdf_bytes: bytes, filename: str, caption: str) -> None:
+def send_telegram(pdf_bytes: bytes, filename: str, caption: str, follow_up: str | None = None) -> None:
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not bot_token or not chat_id:
         print("[publisher] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — skipping delivery")
         return
-    asyncio.run(_send_telegram_async(pdf_bytes, filename, caption, bot_token, chat_id))
+    asyncio.run(_send_telegram_async(pdf_bytes, filename, caption, bot_token, chat_id, follow_up))
 
 
 def run_publisher(newsletter: dict, run_id: str, output_name: str, cost_usd: float) -> Path:
@@ -71,11 +110,10 @@ def run_publisher(newsletter: dict, run_id: str, output_name: str, cost_usd: flo
     pdf_path.write_bytes(pdf_bytes)
     print(f"[publisher] PDF saved to {pdf_path}")
 
-    caption = (
-        f"Research Newsletter — {newsletter.get('newsletter_date', 'today')}\n"
-        f"{meta['article_count']} articles | Cost: ${cost_usd:.4f}"
-    )
-    print("[publisher] Sending via Telegram...")
-    send_telegram(pdf_bytes, filename, caption)
+    caption, follow_up = _build_message(newsletter, meta, cost_usd)
+    bullets = len(newsletter.get("overview") or [])
+    where = "separate message" if follow_up else "caption"
+    print(f"[publisher] Sending via Telegram ({bullets} overview bullet(s) in the {where})...")
+    send_telegram(pdf_bytes, filename, caption, follow_up)
 
     return pdf_path

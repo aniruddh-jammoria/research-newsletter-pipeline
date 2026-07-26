@@ -13,6 +13,9 @@ carrying detail that belongs in the code or the README, not here.
 
 ## 2026-07-26
 
+### Send the week's summary to Telegram alongside the PDF
+The delivery message was just a filename and a count, so seeing what was in the newsletter meant opening the attachment — on a phone, several taps for something that fits on one screen. The opening bullets are now included with the file. Telegram caps the text attached to a file at around a thousand characters, which five full-length bullets can exceed, so when they do not fit they arrive as a separate message immediately after rather than being cut short or silently dropped.
+
 ### Stopped an empty notes file from being fed to the filters as instructions
 The file for accumulating learnings across runs ships as a template of empty section headings, and all of it — headings, plus a preamble describing the file itself and referencing a tool that no longer exists — was being appended to two prompts on every run under the label "additional instructions". Nothing useful, on a step that asks a small local model for careful judgement across dozens of items. An untouched template now counts as empty and nothing is appended; write something under a heading and it takes effect as before. Also removed a leftover report-listing function and an unused style rule, both orphaned when the old web interface was dropped.
 
