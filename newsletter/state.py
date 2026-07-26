@@ -53,11 +53,3 @@ def finish_run(
             WHERE run_id = ?""",
             (now, status, num_queries, article_count, input_tokens, output_tokens, cost_usd, error, run_id),
         )
-
-
-def get_runs(limit: int = 50) -> list[dict]:
-    with _connect() as conn:
-        rows = conn.execute(
-            "SELECT * FROM runs ORDER BY started_at DESC LIMIT ?", (limit,)
-        ).fetchall()
-    return [dict(r) for r in rows]

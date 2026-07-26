@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
@@ -11,13 +12,28 @@ def load(name: str) -> str:
 
 
 def load_memory() -> str:
-    """Load the agent memory file. Returns empty string if file is empty or missing."""
+    """Load the agent memory file, or "" if it holds nothing worth injecting.
+
+    The file ships as a template: section headings with guidance in HTML
+    comments and nothing under them. Those headings must not reach a prompt —
+    they arrive labelled "additional instructions" while containing no
+    instructions, which is pure noise in a prompt already asking a small model
+    for careful batch judgement. So an untouched template counts as empty.
+    """
     if not _MEMORY_FILE.exists():
         return ""
-    content = _MEMORY_FILE.read_text(encoding="utf-8").strip()
-    # Strip template comments so they don't pollute prompts
-    lines = [l for l in content.splitlines() if not l.strip().startswith("<!--")]
-    return "\n".join(lines).strip()
+
+    # Whole comment blocks, not lines starting with "<!--" — the template's
+    # guidance spans several lines per comment.
+    raw = _MEMORY_FILE.read_text(encoding="utf-8")
+    content = re.sub(r"<!--.*?-->", "", raw, flags=re.DOTALL).strip()
+
+    # Anything that is not a heading, a horizontal rule, or blank is real content.
+    has_content = any(
+        stripped and not stripped.startswith("#") and set(stripped) != {"-"}
+        for stripped in (line.strip() for line in content.splitlines())
+    )
+    return content if has_content else ""
 
 
 def with_memory(base_prompt: str, memory: str) -> str:
