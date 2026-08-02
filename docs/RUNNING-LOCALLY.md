@@ -35,7 +35,9 @@ filter: {}      # inherits everything above
 summarize: {}   # also inherits everything above; omit to reuse the filter block
 ```
 
-See [`examples/local.yaml`](../examples/local.yaml) for a complete copy-pasteable version.
+[`examples/local.yaml`](../examples/local.yaml) is a complete, real working config — it writes
+`filter:`/`summarize:` out in full (the "different providers per step" form below) rather than
+using the `mode:` shortcut, but the settings are otherwise exactly this.
 
 ### Do not disable reasoning
 

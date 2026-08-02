@@ -4,18 +4,20 @@
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![LLM: Claude / GPT / local](https://img.shields.io/badge/LLM-Claude%20%7C%20GPT%20%7C%20local-8A2BE2)
 
-Turns a YAML file into a weekly PDF newsletter, delivered to your Telegram.
+Keeping up with a fast-moving field requires monitoring numerous blogs, research papers,
+and social media accounts on a regular basis. Most material published in a given week is
+not relevant to any particular reader, and filtering it manually is time-consuming.
+General-purpose digest newsletters address this by aggregating content, but the selection
+reflects the editor's interests rather than the reader's own.
 
-Staying current on a fast-moving field means either paying for a newsletter that covers
-someone else's interests, or doing the sifting yourself every week. This does the sifting:
-you define the topic, the sources and the accounts to follow, and each run searches, removes
-duplicate coverage, discards the filler, writes its own summaries, and delivers a PDF. Define
-as many newsletters as you want by adding config files — and run the whole reasoning half on
-your own hardware, so a weekly issue costs cents or nothing at all.
-
-## Demo
-
-<!-- TODO: add screenshot/demo of a rendered PDF -->
+**Research Newsletter Pipeline** is a tool that generates a weekly PDF newsletter from a
+set of user-defined topics, sources, and accounts specified in a YAML configuration file.
+Each run retrieves relevant content, removes duplicate coverage, filters out low-value
+material, and produces original summaries before delivering the result via Telegram. The
+filtering, deduplication, and summarization stages can be run using a local
+[llama.cpp](https://github.com/ggml-org/llama.cpp) server, so that no content or model
+output leaves the user's machine; cloud providers such as Anthropic and OpenAI are also
+supported and can be configured independently for each stage.
 
 ## How it works
 
