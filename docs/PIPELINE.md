@@ -8,28 +8,29 @@ which prompt controls it, and what a run costs.
 ## Stage order
 
 ```
-Exa search (news)          Exa search (papers)      getxapi (tweets)
-      |                            |                       |
-      v                            v                       v
-  summarize                    summarize            summarize per account
-  100-150 words                100-150 words           50-100 words
-      |                            |                       |
-      v                            |                       |
-   dedup                           |                       |
-      |                            |                       |
-      v                            |                       |
- newsworthiness                    |                       |
-      |                            |                       |
-      +--> overview (<=5 bullets)  |                       |
-      |                            |                       |
-      +----------------------------+-----------------------+
-                                   |
-                                   v
-                          PDF --> Telegram
+Exa search (news)   Feeds (blogposts/podcasts)   Exa search (papers)   getxapi (tweets)
+      |                        |                         |                    |
+      v                        v                         v                    v
+  summarize                summarize                 summarize          summarize per account
+  100-150 words             100-150 words              100-150 words       50-100 words
+      |                        |                         |                    |
+      v                        |                         |                    |
+   dedup                       |                         |                    |
+      |                        |                         |                    |
+      v                        |                         |                    |
+ newsworthiness                |                         |                    |
+      |                        |                         |                    |
+      +--> overview (<=5 bullets)                        |                    |
+      |                        |                         |                    |
+      +------------------------+-------------------------+--------------------+
+                                |
+                                v
+                       PDF --> Telegram
 ```
 
-Only the News section is filtered. Papers rely on the domain + query restriction being
-targeted enough; tweets are summarized per account rather than selected.
+Only the News section is filtered. Blogposts/Podcasts and Papers rely on the source list
+(or domain + query restriction) being targeted enough; tweets are summarized per account
+rather than selected.
 
 ---
 
@@ -104,6 +105,21 @@ paragraph covering ideas, announcements and technical observations. There is no 
 ranking or top-N cut, since nothing is being selected. Accounts whose week held nothing
 substantive are dropped rather than padded.
 
+## Blogposts & Podcasts
+
+Each configured `{name, url}` source is fetched and parsed directly as an RSS/Atom feed —
+`url` must already be a feed URL. There is no autodiscovery and no page scraping to find a
+feed: a source that fails to fetch, or whose content doesn't parse as a feed with entries, is
+skipped with a named warning at run time. Keeping this deliberately narrow means every
+configured source is a known-good feed, hand-verified once when it is added.
+
+Entries are filtered to `recency_days`, deduplicated by document identity across all sources
+combined (the same URL check used by News/Papers), and capped per source by
+`blog_podcast_results`. When a feed entry's own content is too short to be more than a
+teaser, the item's text is left blank and picked up by the same scrape-the-URL fallback the
+summarizer already uses for News/Papers — no separate logic needed. Podcasts are summarized
+from their feed's show notes/description only; there is no audio transcription.
+
 ---
 
 ## Prompts
@@ -116,6 +132,7 @@ Every LLM step reads its instructions from an editable file. Nothing is hardcode
 | [`prompts/deduplication.md`](../prompts/deduplication.md) | Which articles count as the same story, and which survives |
 | [`prompts/newsworthiness.md`](../prompts/newsworthiness.md) | What is worth including |
 | [`prompts/tweet_summary.md`](../prompts/tweet_summary.md) | Per-account tweet summaries |
+| [`prompts/blog-podcast-summary.md`](../prompts/blog-podcast-summary.md) | Blog post / podcast episode summaries |
 | [`prompts/overview.md`](../prompts/overview.md) | How the opening bullets are chosen and written |
 
 ---
@@ -128,6 +145,7 @@ call returns, not how many calls are made:
 - **News** — 1 call per `search_queries` entry
 - **Papers** — 1 call per `research_papers.queries` entry
 - **Twitter** — 1 call per `twitter_accounts` entry (getxapi, $0.001/call)
+- **Blogposts & Podcasts** — plain HTTP feed fetches, no paid API — $0 in retrieval cost
 
 Exa charges **$7 per 1,000 searches** for up to 10 results, and **page text for those first 10
 is bundled into that price**. Exa's own generated summary is a *separate* $1 per 1,000 pages,

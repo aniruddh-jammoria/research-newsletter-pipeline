@@ -31,7 +31,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $Config = 'configs\ai-research-twitter.yaml',
+    [string] $Config = 'configs\ai-local.yaml',
     [switch] $Test
 )
 

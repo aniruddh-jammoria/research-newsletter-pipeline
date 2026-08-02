@@ -126,7 +126,7 @@
 <body>
 
 <h1>Research Newsletter</h1>
-<p class="subtitle">{{ newsletter.newsletter_date }} &nbsp;&bull;&nbsp; {{ meta.article_count }} articles{% if meta.paper_count %} &nbsp;&bull;&nbsp; {{ meta.paper_count }} papers{% endif %}{% if meta.tweet_count %} &nbsp;&bull;&nbsp; {{ meta.tweet_count }} tweets{% endif %}</p>
+<p class="subtitle">{{ newsletter.newsletter_date }} &nbsp;&bull;&nbsp; {{ meta.article_count }} articles{% if meta.blog_podcast_count %} &nbsp;&bull;&nbsp; {{ meta.blog_podcast_count }} blogs/podcasts{% endif %}{% if meta.paper_count %} &nbsp;&bull;&nbsp; {{ meta.paper_count }} papers{% endif %}{% if meta.tweet_count %} &nbsp;&bull;&nbsp; {{ meta.tweet_count }} tweets{% endif %}</p>
 
 <!-- ── This Week's Overview ──────────────────────────────────────────── -->
 {% if newsletter.overview %}
@@ -145,6 +145,18 @@
 <p class="meta">{{ section.published_date[:10] if section.published_date else "" }} &nbsp; [<a href="{{ section.url }}" class="meta-link">See article</a>]</p>
 <p class="summary">{{ section.summary }}</p>
 {% endfor %}
+
+<!-- ── Blogposts & Podcasts ──────────────────────────────────────────── -->
+{% if newsletter.blog_podcasts %}
+<h2>Blogposts &amp; Podcasts</h2>
+
+{% for item in newsletter.blog_podcasts %}
+{% if not loop.first %}<hr>{% endif %}
+<h3>{{ item.title }}</h3>
+<p class="meta">{{ item.published_date[:10] if item.published_date else "" }} &nbsp;—&nbsp; {{ item.source }} &nbsp; [<a href="{{ item.url }}" class="meta-link">Read more</a>]</p>
+<p class="summary">{{ item.summary }}</p>
+{% endfor %}
+{% endif %}
 
 <!-- ── Research Papers ───────────────────────────────────────────────── -->
 {% if newsletter.papers %}

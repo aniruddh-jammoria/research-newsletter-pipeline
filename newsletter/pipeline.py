@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
+from . import blog_podcasts as blog_podcasts_mod
 from . import llama_server
 from . import overview as overview_mod
 from . import papers as papers_mod
@@ -101,6 +102,7 @@ def _assemble(
     papers: list[dict] | None = None,
     tweets: list[dict] | None = None,
     overview: list[str] | None = None,
+    blog_podcasts: list[dict] | None = None,
 ) -> dict:
     return {
         "newsletter_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -114,6 +116,16 @@ def _assemble(
                 "published_date": a.get("published_date", ""),
             }
             for a in articles
+        ],
+        "blog_podcasts": [
+            {
+                "title":          b["title"],
+                "summary":        b["summary"],
+                "source":         b["source_name"],
+                "url":            b["url"],
+                "published_date": b.get("published_date", ""),
+            }
+            for b in (blog_podcasts or [])
         ],
         "papers": [
             {
@@ -133,7 +145,7 @@ def _to_markdown(newsletter: dict, meta: dict) -> str:
     lines = [
         f"# Research Newsletter — {newsletter['newsletter_date']}",
         "",
-        f"*Generated: {meta['generated_at']} | Articles: {meta['article_count']} | Papers: {meta['paper_count']} | Tweets: {meta['tweet_count']} | Cost: ${meta['cost_usd']:.4f} | Run: {meta['run_id']}*",
+        f"*Generated: {meta['generated_at']} | Articles: {meta['article_count']} | Blogs/Podcasts: {meta['blog_podcast_count']} | Papers: {meta['paper_count']} | Tweets: {meta['tweet_count']} | Cost: ${meta['cost_usd']:.4f} | Run: {meta['run_id']}*",
         "",
     ]
 
@@ -154,6 +166,21 @@ def _to_markdown(newsletter: dict, meta: dict) -> str:
             f"[Read more]({s['url']})",
             "",
         ]
+
+    if newsletter.get("blog_podcasts"):
+        lines += ["", "---", "", "## Blogposts & Podcasts", ""]
+        for b in newsletter["blog_podcasts"]:
+            lines += [
+                "---",
+                "",
+                f"### {b['title']}",
+                f"*{b['published_date'][:10]} — {b['source']}*",
+                "",
+                b["summary"],
+                "",
+                f"[Read more]({b['url']})",
+                "",
+            ]
 
     if newsletter.get("papers"):
         lines += ["", "---", "", "## Research Papers", ""]
@@ -193,6 +220,11 @@ def _parse_papers_cfg(cfg: dict) -> tuple[list[str], list[str]]:
     return papers_cfg.get("queries", []), papers_cfg.get("sources", [])
 
 
+def _parse_blog_podcasts_cfg(cfg: dict) -> list[dict]:
+    sources = cfg.get("blog_podcasts", [])
+    return sources if isinstance(sources, list) else []
+
+
 def run(config_path: Path) -> dict:
     cfg = load_config(config_path)
     search_queries    = cfg["search_queries"]
@@ -203,6 +235,8 @@ def run(config_path: Path) -> dict:
     file_name         = cfg.get("file_name", name)
     paper_queries, paper_sources = _parse_papers_cfg(cfg)
     twitter_accounts  = cfg.get("twitter_accounts", [])
+    blog_podcast_sources = _parse_blog_podcasts_cfg(cfg)
+    blog_podcast_results = cfg.get("blog_podcast_results", 5)
 
     filter_cfg, summarize_cfg = _resolve_filter_summarize_cfg(cfg)
 
@@ -242,9 +276,14 @@ def run(config_path: Path) -> dict:
         tweets = twitter_mod.run_twitter(
             twitter_accounts, recency_days, summarize_llm, summarize_model, tracker,
         ) if twitter_accounts else []
+        blog_podcasts = blog_podcasts_mod.run_blog_podcasts(
+            blog_podcast_sources, recency_days, num_results=blog_podcast_results,
+            summarize_llm=summarize_llm, summarize_model=summarize_model,
+            tracker=tracker,
+        ) if blog_podcast_sources else []
         overview = overview_mod.generate(articles, summarize_llm, summarize_model, tracker)
 
-        newsletter = _assemble(articles, papers, tweets, overview)
+        newsletter = _assemble(articles, papers=papers, tweets=tweets, overview=overview, blog_podcasts=blog_podcasts)
         summary = tracker.summary()
         _save_cache(run_id, output_name, newsletter, summary["cost_usd"])
         pdf_path = publisher.run_publisher(newsletter, run_id, output_name, summary["cost_usd"])
@@ -259,7 +298,7 @@ def run(config_path: Path) -> dict:
         )
 
         print(f"\n=== Done: {run_id} ===")
-        print(f"Articles: {len(articles)} | Papers: {len(papers)} | Tweets: {len(tweets)}")
+        print(f"Articles: {len(articles)} | Blogs/Podcasts: {len(blog_podcasts)} | Papers: {len(papers)} | Tweets: {len(tweets)}")
         print(f"Tokens:   {summary['input_tokens']} in / {summary['output_tokens']} out")
         print(f"Cost:     ${summary['cost_usd']:.4f}")
         print(f"PDF:      {pdf_path}")
@@ -284,6 +323,8 @@ def run_test(config_path: Path) -> dict:
     file_name         = cfg.get("file_name", name)
     paper_queries, paper_sources = _parse_papers_cfg(cfg)
     twitter_accounts  = cfg.get("twitter_accounts", [])
+    blog_podcast_sources = _parse_blog_podcasts_cfg(cfg)
+    blog_podcast_results = cfg.get("blog_podcast_results", 5)
 
     filter_cfg, summarize_cfg = _resolve_filter_summarize_cfg(cfg)
 
@@ -323,15 +364,21 @@ def run_test(config_path: Path) -> dict:
         tweets = twitter_mod.run_twitter(
             twitter_accounts, recency_days, summarize_llm, summarize_model, tracker,
         ) if twitter_accounts else []
+        blog_podcasts = blog_podcasts_mod.run_blog_podcasts(
+            blog_podcast_sources, recency_days, num_results=blog_podcast_results,
+            summarize_llm=summarize_llm, summarize_model=summarize_model,
+            tracker=tracker,
+        ) if blog_podcast_sources else []
         overview = overview_mod.generate(articles, summarize_llm, summarize_model, tracker)
 
-        newsletter = _assemble(articles, papers, tweets, overview)
+        newsletter = _assemble(articles, papers=papers, tweets=tweets, overview=overview, blog_podcasts=blog_podcasts)
         summary = tracker.summary()
         _save_cache(run_id, output_name, newsletter, summary["cost_usd"])
         meta = {
             "run_id":        run_id,
             "generated_at":  datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "article_count": len(articles),
+            "blog_podcast_count": len(blog_podcasts),
             "paper_count":   len(papers),
             "tweet_count":   len(tweets),
             "cost_usd":      summary["cost_usd"],
@@ -351,7 +398,7 @@ def run_test(config_path: Path) -> dict:
         )
 
         print(f"\n=== Test run complete: {run_id} ===")
-        print(f"Articles: {len(articles)} | Papers: {len(papers)} | Tweets: {len(tweets)}")
+        print(f"Articles: {len(articles)} | Blogs/Podcasts: {len(blog_podcasts)} | Papers: {len(papers)} | Tweets: {len(tweets)}")
         print(f"Tokens:   {summary['input_tokens']} in / {summary['output_tokens']} out")
         print(f"Cost:     ${summary['cost_usd']:.4f}")
         print(f"Output:   {md_path}")
@@ -373,7 +420,7 @@ def run_rerun(run_id: str) -> dict:
     cost_usd    = cache["cost_usd"]
 
     print(f"\n=== Re-publishing: {run_id} ===")
-    print(f"Articles: {len(newsletter.get('sections', []))} | Papers: {len(newsletter.get('papers', []))} | Tweets: {len(newsletter.get('tweets', []))}")
+    print(f"Articles: {len(newsletter.get('sections', []))} | Blogs/Podcasts: {len(newsletter.get('blog_podcasts', []))} | Papers: {len(newsletter.get('papers', []))} | Tweets: {len(newsletter.get('tweets', []))}")
 
     pdf_path = publisher.run_publisher(newsletter, run_id, output_name, cost_usd)
     print(f"PDF: {pdf_path}")

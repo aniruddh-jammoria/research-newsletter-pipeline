@@ -92,6 +92,7 @@ def run_publisher(newsletter: dict, run_id: str, output_name: str, cost_usd: flo
 
     meta = {
         "article_count": len(newsletter.get("sections", [])),
+        "blog_podcast_count": len(newsletter.get("blog_podcasts", [])),
         "paper_count":   len(newsletter.get("papers", [])),
         "tweet_count":   len(newsletter.get("tweets", [])),
         "generated_at":  datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),

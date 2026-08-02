@@ -102,6 +102,7 @@ def summarize_items(
     model: str,
     tracker: CostTracker,
     label: str = "summarize",
+    prompt_name: str = "summarize",
 ) -> tuple[list[dict], dict]:
     """Turn each item's raw page `text` into a model-written summary.
 
@@ -115,7 +116,7 @@ def summarize_items(
 
     Returns (items_with_summaries, stats).
     """
-    prompt = load("summarize")
+    prompt = load(prompt_name)
     total = len(items)
     stats = {"total": total, "exa_text": 0, "scraped": 0, "no_content": 0,
              "llm_failed": 0, "title_rewritten": 0}

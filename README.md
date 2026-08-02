@@ -22,12 +22,13 @@ your own hardware, so a weekly issue costs cents or nothing at all.
 1. **You provide** a YAML file — search queries, academic domains, Twitter accounts — plus API
    keys in `.env`.
 2. **Retrieval:** [Exa](https://exa.ai) searches news and papers; [getxapi](https://www.getxapi.com)
-   fetches posts. Both return the page text alongside each result.
+   fetches posts; your configured blogs and podcasts are read straight from their RSS/Atom feeds.
 3. **Summarization:** your chosen model condenses every article and paper to a neutral 100-150
-   words, and each account's week of posts to 50-100 words. Titles are cleaned in the same pass.
+   words, each account's week of posts to 50-100 words, and each blog post or podcast episode to
+   a single 30-word-or-fewer sentence. Titles are cleaned in the same pass.
 4. **Filtering (news only):** one pass removes duplicate coverage of the same event, keeping the
    most authoritative source; a second judges what remains on its own merits.
-5. **Output:** a PDF with an up-to-5-bullet overview, three sections, and delivery to Telegram.
+5. **Output:** a PDF with an up-to-5-bullet overview, four sections, and delivery to Telegram.
    Every run is logged to SQLite and cached so it can be re-rendered for free.
 
 The reasoning steps in 3 and 4 are the part that would otherwise cost money on every run.
@@ -94,16 +95,17 @@ entry that runs in local time, survives daylight saving, and can wake the machin
 Filter:    local | gemma-4-26B-A4B-it
 Summarize: local | gemma-4-26B-A4B-it
 
-[research] 50 unique articles found
-[research] 50 in / 50 summarized in 18:23 (22.1s each) — Exa text: 50, scraped: 0, no content: 0 (0.0%), titles cleaned: 31
-[research] Dedup:  37 kept, 13 dropped
-[research] Filter: 27 kept, 10 dropped
-[papers]   18 unique papers found
-[twitter]  14 account(s) summarized (2 silent, 3 nothing notable)
-[overview] 5 bullet(s) written
+[research]      50 unique articles found
+[research]      50 in / 50 summarized in 18:23 (22.1s each) — Exa text: 50, scraped: 0, no content: 0 (0.0%), titles cleaned: 31
+[research]      Dedup:  37 kept, 13 dropped
+[research]      Filter: 27 kept, 10 dropped
+[papers]        18 unique papers found
+[blog_podcasts] 6 unique item(s) found across 5/5 source(s)
+[twitter]       14 account(s) summarized (2 silent, 3 nothing notable)
+[overview]      5 bullet(s) written
 
 === Done: ai-research-abc123 ===
-Articles: 27 | Papers: 18 | Accounts: 14
+Articles: 27 | Blogs/Podcasts: 6 | Papers: 18 | Tweets: 14
 Cost:     $0.0000
 PDF:      data/ai-research_2026-07-26.pdf
 ```
@@ -127,9 +129,14 @@ research_papers:                     # domain-restricted search
 
 twitter_accounts: [sama, karpathy]   # every post in the window is summarized
 
-recency_days: 7        # how far back to look
-news_results: 5        # per search_queries entry
-paper_results: 5       # per research_papers.queries entry
+blog_podcasts:                       # each url must be a direct RSS/Atom feed
+  - name: Simon Willison
+    url: https://simonwillison.net/atom/everything/
+
+recency_days: 7             # how far back to look
+news_results: 5             # per search_queries entry
+paper_results: 5            # per research_papers.queries entry
+blog_podcast_results: 5     # per blog_podcasts entry
 
 mode: cloud            # or "local" — sets the default provider for both steps below
 model: claude-haiku-4-5
@@ -144,8 +151,9 @@ other mix. For OpenAI, use `provider: openai` with `model: gpt-4o-mini` and set 
 
 **Prompts.** Every LLM step reads editable instructions from `prompts/` — nothing is hardcoded.
 Edit [`summarize.md`](prompts/summarize.md), [`deduplication.md`](prompts/deduplication.md),
-[`newsworthiness.md`](prompts/newsworthiness.md), [`tweet_summary.md`](prompts/tweet_summary.md)
-or [`overview.md`](prompts/overview.md) to change how strict, lenient or verbose that stage is.
+[`newsworthiness.md`](prompts/newsworthiness.md), [`tweet_summary.md`](prompts/tweet_summary.md),
+[`blog-podcast-summary.md`](prompts/blog-podcast-summary.md) or [`overview.md`](prompts/overview.md)
+to change how strict, lenient or verbose that stage is.
 
 **Templates.** The PDF layout is a single Jinja2 template at
 `newsletter/templates/newsletter.html`.
@@ -161,7 +169,7 @@ without querying someone's index. Reasoning is not:
 
 ```
 RETRIEVAL — always networked
-Exa (news + papers)  ·  getxapi (posts)
+Exa (news + papers)  ·  getxapi (posts)  ·  RSS/Atom feeds (blogs + podcasts)
                     |
                     v
 REASONING — your choice, per step
@@ -176,7 +184,8 @@ newsletter/
 ├── research.py       # News search, dedup, newsworthiness filter
 ├── papers.py         # Academic paper search
 ├── twitter.py        # Post fetching + per-account summaries
-├── summarize.py      # Page text -> 100-150 word summary + clean title
+├── blog_podcasts.py  # RSS/Atom feed fetching + per-item summaries
+├── summarize.py      # Page text -> summary + clean title (per-section length/prompt)
 ├── overview.py       # The opening bullets
 ├── urls.py           # Same-document URL identity (arXiv forms, tracking params)
 ├── llm.py            # Provider-agnostic wrapper (Anthropic / OpenAI / local)
@@ -197,6 +206,7 @@ docs/       # Pipeline detail, local models, scheduling
 |---|---|
 | News & paper search | [Exa](https://exa.ai) neural search |
 | Twitter/X | [getxapi](https://www.getxapi.com) |
+| Blogs & podcasts | RSS/Atom feeds via feedparser |
 | Reasoning | Anthropic Claude / OpenAI GPT / local llama.cpp |
 | Scrape fallback | trafilatura |
 | PDF | xhtml2pdf + Jinja2 |
