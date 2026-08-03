@@ -36,6 +36,9 @@ supported and can be configured independently for each stage.
 The reasoning steps in 3 and 4 are the part that would otherwise cost money on every run.
 Point them at Anthropic, OpenAI, or your own llama.cpp server — independently, per step.
 
+A real run — the delivered PDF and its Markdown preview — is in
+[`examples/output/`](examples/output/).
+
 ## Quick start
 
 ```bash
@@ -161,8 +164,9 @@ to change how strict, lenient or verbose that stage is.
 `newsletter/templates/newsletter.html`.
 
 See [`examples/cloud.yaml`](examples/cloud.yaml) and [`examples/local.yaml`](examples/local.yaml)
-for complete, ready-to-copy configs, and [docs/PIPELINE.md](docs/PIPELINE.md) for what each stage
-actually does and what a run costs.
+for complete, ready-to-copy configs, [`examples/output/`](examples/output/) for what a finished
+newsletter looks like, and [docs/PIPELINE.md](docs/PIPELINE.md) for what each stage actually does
+and what a run costs.
 
 ## Architecture
 
@@ -198,7 +202,7 @@ newsletter/
 └── state.py          # SQLite run history
 
 configs/    # One YAML per newsletter (auto-discovered)
-examples/   # Ready-to-copy cloud and local templates
+examples/   # Ready-to-copy cloud and local templates, plus a real run's output
 prompts/    # Editable instructions for every LLM step
 scripts/    # Scheduled-run wrapper and task registration
 docs/       # Pipeline detail, local models, scheduling
