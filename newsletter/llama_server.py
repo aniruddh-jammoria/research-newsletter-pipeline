@@ -55,14 +55,14 @@ def ensure_running(block_cfg: dict) -> str | None:
     )
     _processes[base_url] = process
 
-    for _ in range(60):
+    for _ in range(180):
         if _is_up(base_url):
             print("[llama] server ready")
             return base_url
         time.sleep(1)
 
     stop(base_url)
-    raise RuntimeError("llama-server did not become ready within 60s")
+    raise RuntimeError("llama-server did not become ready within 180s")
 
 
 def stop(base_url: str) -> None:

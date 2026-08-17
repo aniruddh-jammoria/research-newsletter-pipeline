@@ -11,6 +11,11 @@ carrying detail that belongs in the code or the README, not here.
 
 ---
 
+## 2026-08-17
+
+### Extended the local model startup timeout
+This week's scheduled run failed before doing any work because the local model server wasn't ready within the one-minute window the pipeline allowed for it to start, aborting the whole run. The three prior weekly runs had all started in time, so this looks like an occasional timing margin issue rather than a broken setup. The window was extended to three minutes so a slower-than-usual load doesn't sink an entire run.
+
 ## 2026-08-02
 
 ### Added a Blogposts & Podcasts section
