@@ -11,6 +11,24 @@ carrying detail that belongs in the code or the README, not here.
 
 ---
 
+## 2026-09-16
+
+### Captured the local model server's own output instead of discarding it
+A manual run this week got partway through summarizing articles, then the local model server stopped responding entirely and every remaining step failed until the whole run gave up. There was no way to tell why: the server's own output was being thrown away rather than kept anywhere. It now writes what it prints to a file next to the other run data, so the next time it dies mid-run there's an actual error message to look at instead of a guess. The slowdown that preceded the failure also matched a pattern from the week before, so GPU memory pressure from other running programs is suspected but not yet confirmed as the cause.
+
+### Stopped paying twice for search results after a failed run
+Every retry after a mid-run failure was re-running the paid article and paper searches from scratch, even though the local model — the part that had actually failed — costs nothing to rerun. Search results are now kept for the rest of the day they were fetched, so a same-day retry reuses what was already paid for instead of searching again. A retry with different search terms still searches fresh, and the next day's run always starts clean.
+
+## 2026-09-15
+
+### Stopped a stuck run from tying up the machine for hours
+Last week's scheduled run hit a slowdown during summarization and never finished — after three hours it was killed outright, well past how long a normal run takes, and because of how it was killed, the local model server it had started was left running in the background afterward, doing nothing but holding onto GPU memory. The scheduled run is now cut off much sooner (90 minutes instead of three hours) so a stuck run fails fast rather than grinding for most of a workday, and it now also checks for and cleans up a leftover model server from a prior run before starting a new one, so an abrupt kill doesn't leave anything running indefinitely.
+
+## 2026-09-07
+
+### Made the deduplication step tolerant of a miscounted response
+This week's scheduled run got through search and summarization but then failed completely during deduplication: the model was asked for one keep/drop decision per article and, on its second attempt, still returned one too many. That mismatch aborted the whole run, so no newsletter was produced at all that day. Now, if a retry still comes back with more decisions than articles, the extra ones are simply dropped rather than treated as a fatal error, so a run doesn't lose everything over an off-by-one from the model.
+
 ## 2026-08-17
 
 ### Extended the local model startup timeout

@@ -7,6 +7,7 @@ from exa_py import Exa
 from exa_py.api import ContentsOptions, TextContentsOptions
 
 from .cost import CostTracker
+from .exa_cache import get_or_fetch
 from .llm import LLMClient
 from .prompts import load, load_memory, with_memory
 from .summarize import summarize_items
@@ -40,53 +41,60 @@ def _write_run_log(run_id: str, log: dict) -> None:
 
 def search_exa(queries: list[str], recency_days: int, num_results: int = 5) -> tuple[list[dict], int]:
     """Returns (articles, number of same-document duplicates merged)."""
-    api_key = os.getenv("EXA_API_KEY")
-    if not api_key:
-        raise EnvironmentError("EXA_API_KEY not set")
 
-    exa = Exa(api_key=api_key)
-    cutoff = _cutoff_date(recency_days)
-    seen_keys: set[str] = set()
-    dupes = 0
-    articles: list[dict] = []
+    def _fetch() -> dict:
+        api_key = os.getenv("EXA_API_KEY")
+        if not api_key:
+            raise EnvironmentError("EXA_API_KEY not set")
 
-    for query in queries:
-        try:
-            response = exa.search(
-                query,
-                num_results=num_results,
-                start_published_date=cutoff,
-                category="news",
-                contents=ContentsOptions(
-                    text=TextContentsOptions(max_characters=_TEXT_CHARS),
-                ),
-            )
-        except Exception as e:
-            print(f"  [search] skipping query '{query}': {e}")
-            continue
+        exa = Exa(api_key=api_key)
+        cutoff = _cutoff_date(recency_days)
+        seen_keys: set[str] = set()
+        dupes = 0
+        articles: list[dict] = []
 
-        for r in response.results:
-            url = r.url
-            if not url:
+        for query in queries:
+            try:
+                response = exa.search(
+                    query,
+                    num_results=num_results,
+                    start_published_date=cutoff,
+                    category="news",
+                    contents=ContentsOptions(
+                        text=TextContentsOptions(max_characters=_TEXT_CHARS),
+                    ),
+                )
+            except Exception as e:
+                print(f"  [search] skipping query '{query}': {e}")
                 continue
-            # Same page under a different tracking param or www/https form is
-            # the same article. Genuine duplicate *coverage* is the LLM pass's
-            # job; this only catches identical documents.
-            key = canonical_key(url)
-            if key in seen_keys:
-                dupes += 1
-                continue
-            seen_keys.add(key)
 
-            articles.append({
-                "url": url,
-                "title": r.title or "",
-                "published_date": r.published_date or "",
-                "source_domain": url.split("/")[2] if "/" in url else "",
-                "text": getattr(r, "text", "") or "",
-            })
+            for r in response.results:
+                url = r.url
+                if not url:
+                    continue
+                # Same page under a different tracking param or www/https form is
+                # the same article. Genuine duplicate *coverage* is the LLM pass's
+                # job; this only catches identical documents.
+                key = canonical_key(url)
+                if key in seen_keys:
+                    dupes += 1
+                    continue
+                seen_keys.add(key)
 
-    return articles, dupes
+                articles.append({
+                    "url": url,
+                    "title": r.title or "",
+                    "published_date": r.published_date or "",
+                    "source_domain": url.split("/")[2] if "/" in url else "",
+                    "text": getattr(r, "text", "") or "",
+                })
+
+        return {"articles": articles, "dupes": dupes}
+
+    result = get_or_fetch(
+        "news", {"queries": queries, "recency_days": recency_days, "num_results": num_results}, _fetch
+    )
+    return result["articles"], result["dupes"]
 
 
 # ── Shared keep/drop pass ─────────────────────────────────────────────────────
@@ -133,7 +141,11 @@ def _keep_drop_pass(
         )
         text2, inp2, out2 = llm.complete(model, system, fix_msg, max_tokens=_MAX_TOKENS)
         tracker.add(model, inp2, out2)
-        decisions = _validate(_parse(text2))
+        parsed2 = _parse(text2)
+        if isinstance(parsed2, list) and len(parsed2) > n:
+            print(f"[research] {step_label} retry still returned {len(parsed2)} decisions, truncating to {n}")
+            parsed2 = parsed2[:n]
+        decisions = _validate(parsed2)
         text = text2
 
     kept = [a for a, d in zip(articles, decisions) if str(d).strip().lower() == "keep"]
