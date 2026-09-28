@@ -11,6 +11,11 @@ carrying detail that belongs in the code or the README, not here.
 
 ---
 
+## 2026-09-28
+
+### Made a local model server that refuses to start fail fast, with the reason
+This week's scheduled run produced nothing: an overnight update to the local model software dropped support for one of the startup settings the pipeline passes it, so the server quit instantly — but the pipeline didn't notice, kept waiting for 15 minutes, and left behind an empty log. Diagnosing it meant starting the server by hand to see the error. The pipeline now notices straight away when the server has exited during startup and stops within seconds, quoting the server's own error message, which is also kept in a file. The retired setting was swapped for its replacement, and the server was confirmed to start normally again. Looking into the empty log also showed that the server's log had never actually captured anything since it was added two weeks ago: a setting meant to make it more talkative in fact limited it to errors only. That setting was removed, and the log now records the server's full startup and activity.
+
 ## 2026-09-16
 
 ### Captured the local model server's own output instead of discarding it

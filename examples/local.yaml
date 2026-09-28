@@ -71,7 +71,7 @@ blog_podcast_results: 5     # per blog_podcasts entry, most-recent-first within 
 # mid-thought cutoff when the budget is hit. --split-mode tensor is enabled
 # since this is the MoE Gemma variant (A4B = active-4B MoE) — ~16% faster
 # decode than layer-mode on MoE models; remove it (and --split-mode) for a
-# dense model, along with -lv 1 (verbose logging — drop it for quieter output).
+# dense model.
 filter:
   provider: local
   model: gemma-4-26B-A4B-it
@@ -91,9 +91,8 @@ filter:
     - 2048
     - --reasoning-budget-message
     - "Time is up. Provide your final answer now."
-    - --no-mmap
-    - -lv
-    - 1
+    - --load-mode
+    - none
 
 # Summarization — condenses every article/paper to 100-150 words before any
 # filtering. Can be a different provider/model than `filter` (e.g. filter on a
@@ -118,6 +117,5 @@ summarize:
     - 2048
     - --reasoning-budget-message
     - "Time is up. Provide your final answer now."
-    - --no-mmap
-    - -lv
-    - 1
+    - --load-mode
+    - none

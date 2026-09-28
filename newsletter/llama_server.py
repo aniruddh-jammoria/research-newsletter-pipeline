@@ -103,26 +103,44 @@ def ensure_running(block_cfg: dict) -> str | None:
     # printed but not yet flushed is lost — which is exactly what happened the
     # first time this was tried, producing an empty log with no clue why the
     # server had gone unreachable.
+    # stderr still goes to its own file, though: anything llama-server rejects
+    # before opening its log (e.g. a CLI flag a newer build no longer accepts)
+    # is only ever printed there.
     _DATA_DIR.mkdir(exist_ok=True)
     log_path = _DATA_DIR / f"llama_server_{port}.log"
-    process = subprocess.Popen(
-        [server_exe, "-m", model_path, "--port", str(port), "--log-file", str(log_path), *extra_args],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    stderr_path = _DATA_DIR / f"llama_server_{port}_stderr.log"
+    with open(stderr_path, "wb") as stderr_file:
+        process = subprocess.Popen(
+            [server_exe, "-m", model_path, "--port", str(port), "--log-file", str(log_path), *extra_args],
+            stdout=subprocess.DEVNULL,
+            stderr=stderr_file,
+        )
     _processes[base_url] = process
     pids = _load_pids()
     pids[base_url] = process.pid
     _save_pids(pids)
 
-    for _ in range(180):
+    # Deadline-based rather than a fixed number of polls: on Windows a refused
+    # connection to "localhost" can take seconds, which stretched 180 polls
+    # into ~15 minutes.
+    deadline = time.monotonic() + 180
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            _processes.pop(base_url, None)
+            stop(base_url)
+            tail = stderr_path.read_text(errors="replace").strip().splitlines()[-10:]
+            raise RuntimeError(
+                f"llama-server exited during startup (code {process.returncode}):\n"
+                + "\n".join(tail)
+                + f"\n— full output in {stderr_path}"
+            )
         if _is_up(base_url):
             print("[llama] server ready")
             return base_url
         time.sleep(1)
 
     stop(base_url)
-    raise RuntimeError(f"llama-server did not become ready within 180s — see {log_path} for what it printed")
+    raise RuntimeError(f"llama-server did not become ready within 180s — see {stderr_path} for what it printed")
 
 
 def stop(base_url: str) -> None:

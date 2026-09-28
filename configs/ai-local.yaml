@@ -117,9 +117,8 @@ filter:
     - 2048
     - --reasoning-budget-message
     - "Time is up. Provide your final answer now."
-    - --no-mmap
-    - -lv
-    - 1
+    - --load-mode
+    - none
 
 # Summarization — condenses every article/paper to 100-150 words before any
 # filtering. Can be a different provider/model than `filter` (e.g. filter on a
@@ -144,6 +143,5 @@ summarize:
     - 2048
     - --reasoning-budget-message
     - "Time is up. Provide your final answer now."
-    - --no-mmap
-    - -lv
-    - 1
+    - --load-mode
+    - none
