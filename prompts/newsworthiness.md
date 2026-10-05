@@ -20,9 +20,9 @@ Given a list of articles, decide which to KEEP and which to DROP.
 ## Output format
 Respond with valid JSON only — no markdown, no explanation outside the JSON.
 
-Return a JSON array of exactly as many entries as articles given, each either "keep" or "drop",
-in the exact same order as the input articles list. Do not repeat URLs, titles, or anything else —
-only the array of decisions.
+Return a JSON object with one entry per article, mapping the article's "id" (as a string) to
+either "keep" or "drop". Include every id exactly once. Do not repeat URLs, titles, or anything
+else — only the object of decisions.
 
 Example (3 articles in, 3 decisions out):
-["keep", "drop", "keep"]
+{"1": "keep", "2": "drop", "3": "keep"}

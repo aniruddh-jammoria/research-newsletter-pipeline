@@ -14,7 +14,7 @@ from .summarize import summarize_items
 from .urls import canonical_key
 
 _LOGS_DIR = Path(__file__).parent.parent / "logs"
-_MAX_TOKENS = 8192  # output cap for keep/drop passes — response is a short array, this is headroom
+_MAX_TOKENS = 8192  # output cap for keep/drop passes — response is a short id-to-decision object, this is headroom
 
 # Page text is bundled into the base search price for the first 10 results,
 # whereas Exa's generated summary is a separate per-page charge. We ask for text
@@ -108,55 +108,77 @@ def _keep_drop_pass(
     tracker: CostTracker,
     step_label: str,
 ) -> tuple[list[dict], dict]:
-    """Run one LLM keep/drop pass over `articles`. Returns (kept_articles, log_dict)."""
+    """Run one LLM keep/drop pass over `articles`. Returns (kept_articles, log_dict).
+
+    Decisions are keyed by each article's 1-based id rather than matched by
+    position, so a skipped or extra entry affects only that article instead of
+    shifting every decision after it. A missing decision defaults to "keep", and
+    an unusable response after one retry keeps everything — a keep/drop pass
+    must never be the reason a run produces no newsletter.
+    """
     n = len(articles)
 
-    text, inp, out = llm.complete(model, system, user_msg, max_tokens=_MAX_TOKENS)
-    tracker.add(model, inp, out)
-    first_attempt_text = None
-
-    def _parse(raw: str) -> list:
+    def _parse(raw: str) -> dict:
         raw = raw.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
-        return json.loads(raw.strip())
+        parsed = json.loads(raw.strip())
+        if isinstance(parsed, dict):
+            return {str(k).strip(): v for k, v in parsed.items()}
+        # A bare array is only trustworthy positionally when the count matches.
+        if isinstance(parsed, list) and len(parsed) == n:
+            return {str(i): v for i, v in enumerate(parsed, 1)}
+        got = f"array of {len(parsed)}" if isinstance(parsed, list) else type(parsed).__name__
+        raise ValueError(f"expected an object keyed by article id, got {got}")
 
-    def _validate(decisions) -> list:
-        if not isinstance(decisions, list) or len(decisions) != n:
-            got = len(decisions) if isinstance(decisions, list) else type(decisions).__name__
-            raise ValueError(f"expected a list of exactly {n} decisions, got {got}")
-        return decisions
+    text, inp, out = llm.complete(model, system, user_msg, max_tokens=_MAX_TOKENS)
+    tracker.add(model, inp, out)
+    first_attempt_text = None
+    raw_decisions = None
 
     try:
-        decisions = _validate(_parse(text))
+        raw_decisions = _parse(text)
     except (json.JSONDecodeError, ValueError) as e:
         print(f"[research] {step_label} response invalid ({e}), retrying with fix request...")
         first_attempt_text = text
         fix_msg = (
-            f"The following output is invalid. It must be a JSON array of exactly "
-            f"{n} strings (\"keep\" or \"drop\"), nothing else. "
-            f"Fix and return only the corrected array:\n\n{text}"
+            f"The following output is invalid. It must be a JSON object mapping each article id "
+            f"(\"1\" to \"{n}\") to \"keep\" or \"drop\", nothing else. "
+            f"Fix and return only the corrected object:\n\n{text}"
         )
-        text2, inp2, out2 = llm.complete(model, system, fix_msg, max_tokens=_MAX_TOKENS)
+        text, inp2, out2 = llm.complete(model, system, fix_msg, max_tokens=_MAX_TOKENS)
         tracker.add(model, inp2, out2)
-        parsed2 = _parse(text2)
-        if isinstance(parsed2, list) and len(parsed2) > n:
-            print(f"[research] {step_label} retry still returned {len(parsed2)} decisions, truncating to {n}")
-            parsed2 = parsed2[:n]
-        decisions = _validate(parsed2)
-        text = text2
+        try:
+            raw_decisions = _parse(text)
+        except (json.JSONDecodeError, ValueError) as e2:
+            print(f"[research] WARNING: {step_label} retry also invalid ({e2}) — keeping all {n} articles")
 
-    kept = [a for a, d in zip(articles, decisions) if str(d).strip().lower() == "keep"]
+    decisions, defaulted = [], []
+    for i in range(1, n + 1):
+        d = str((raw_decisions or {}).get(str(i), "")).strip().lower()
+        if d not in ("keep", "drop"):
+            defaulted.append(i)
+            d = "keep"
+        decisions.append(d)
+    if raw_decisions is not None and defaulted:
+        print(f"[research] WARNING: {step_label} gave no valid decision for article(s) "
+              f"{defaulted} — keeping them")
+
+    kept = [a for a, d in zip(articles, decisions) if d == "keep"]
     drop_count = n - len(kept)
     print(f"[research] {step_label}: {len(kept)} kept, {drop_count} dropped")
 
     log = {
-        "candidates": [{"url": a["url"], "title": a["title"]} for a in articles],
+        "candidates": [{"id": i, "url": a["url"], "title": a["title"]} for i, a in enumerate(articles, 1)],
         "llm_raw_output": text,
         "llm_decisions": decisions,
     }
+    if defaulted:
+        log["defaulted_to_keep"] = defaulted
+    if raw_decisions is None:
+        log["fell_back_to_keep_all"] = True
     if first_attempt_text is not None:
         log["llm_raw_output_first_attempt_invalid"] = first_attempt_text
 
@@ -180,19 +202,19 @@ def deduplicate_articles(
 
     candidates = [
         {
+            "id": i,
             "url": a["url"],
             "title": a["title"],
             "published_date": a["published_date"],
             "summary": a["summary"],
         }
-        for a in articles
+        for i, a in enumerate(articles, 1)
     ]
 
     user_msg = (
         f"Decide keep or drop for each of the following {len(candidates)} articles.\n"
-        f"Respond with a JSON array of exactly {len(candidates)} strings — \"keep\" or \"drop\" — "
-        f"one per article, in the exact same order as the articles below. Do not repeat URLs, "
-        f"titles, or anything else — only the array.\n\n"
+        f"Respond with a JSON object mapping every article id (\"1\" to \"{len(candidates)}\") "
+        f"to \"keep\" or \"drop\". Do not repeat URLs, titles, or anything else — only the object.\n\n"
         f"Articles:\n{json.dumps(candidates, indent=2)}"
     )
 
@@ -223,20 +245,20 @@ def filter_newsworthiness(
     query_list = "\n".join(f"- {q}" for q in search_queries)
     candidates = [
         {
+            "id": i,
             "url": a["url"],
             "title": a["title"],
             "published_date": a["published_date"],
             "summary": a["summary"],
         }
-        for a in articles
+        for i, a in enumerate(articles, 1)
     ]
 
     user_msg = (
         f"Search queries used to find these articles:\n{query_list}\n\n"
         f"Decide keep or drop for each of the following {len(candidates)} articles.\n"
-        f"Respond with a JSON array of exactly {len(candidates)} strings — \"keep\" or \"drop\" — "
-        f"one per article, in the exact same order as the articles below. Do not repeat URLs, "
-        f"titles, or anything else — only the array.\n\n"
+        f"Respond with a JSON object mapping every article id (\"1\" to \"{len(candidates)}\") "
+        f"to \"keep\" or \"drop\". Do not repeat URLs, titles, or anything else — only the object.\n\n"
         f"Articles:\n{json.dumps(candidates, indent=2)}"
     )
 

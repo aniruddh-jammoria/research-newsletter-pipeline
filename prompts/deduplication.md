@@ -16,7 +16,7 @@ Only decide "is this a duplicate of another article in this list, and if so, whi
 ## Output format
 Respond with valid JSON only — no markdown, no explanation outside the JSON.
 
-Return a JSON array of exactly as many entries as articles given, each either "keep" or "drop", in the exact same order as the input articles list. Do not repeat URLs, titles, or anything else — only the array of decisions.
+Return a JSON object with one entry per article, mapping the article's "id" (as a string) to either "keep" or "drop". Include every id exactly once. Do not repeat URLs, titles, or anything else — only the object of decisions.
 
 Example (5 articles in, where articles 2 and 4 cover the same event and article 2 is kept):
-["keep", "keep", "keep", "drop", "keep"]
+{"1": "keep", "2": "keep", "3": "keep", "4": "drop", "5": "keep"}

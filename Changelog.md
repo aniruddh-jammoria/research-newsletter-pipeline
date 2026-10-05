@@ -11,6 +11,14 @@ carrying detail that belongs in the code or the README, not here.
 
 ---
 
+## 2026-10-05
+
+### Stopped the duplicate and newsworthiness checks from ever ending a run
+This week's scheduled run got through search and summarizing, then failed during the duplicate check: the model gave 48 keep/drop answers for 49 articles, did the same on retry, and the whole run stopped. The fix from four weeks ago only handled getting too many answers, not too few. Looking at both failures showed the real weakness: answers were matched to articles purely by position, so one skipped answer made every later decision apply to the wrong article. Each article now has a number and the model answers by number, so a missing answer affects only that one article, which is kept by default. If the response is still unusable after one retry, every article is kept, so the worst case is a duplicate getting through rather than no newsletter at all.
+
+### Stop the run when the model is down instead of publishing a near-empty newsletter
+A same-day re-run found something else briefly answering on the local model's port, took it for a working server, and then lost every article to connection errors, one slow retry at a time. It was on track to send an almost empty newsletter before it was stopped by hand. Summarizing now stops the whole run, before anything is published, as soon as three items in a row fail or once more than half the batch has failed. A dead server is now caught in about two minutes instead of after forty, and isolated failures on individual articles still go through as before.
+
 ## 2026-09-28
 
 ### Made a local model server that refuses to start fail fast, with the reason

@@ -28,6 +28,14 @@ _MAX_TOKENS = 2560
 
 _SCRAPE_TIMEOUT = 15
 
+# A model that errors on several items in a row is down, not having trouble
+# with particular articles — carrying on would drop every remaining item one
+# slow retry at a time and publish a near-empty newsletter. Abort instead.
+_MAX_CONSECUTIVE_LLM_ERRORS = 3
+# Same reasoning applied to the whole batch, for a model that fails
+# intermittently rather than outright.
+_MAX_LLM_FAILED_FRACTION = 0.5
+
 
 def _fmt_secs(seconds: float) -> str:
     """m:ss under an hour, h:mm:ss above."""
@@ -124,6 +132,7 @@ def summarize_items(
 
     print(f"[{label}] Summarizing {total} items via {llm.provider} ({model})...", flush=True)
     started_at = time.time()
+    consecutive_errors = 0
 
     for i, item in enumerate(items, 1):
         t_item = time.time()
@@ -155,7 +164,14 @@ def summarize_items(
             _progress(label, i, total, "dropped: LLM error",
                       time.time() - t_item, started_at, domain)
             print(f"      -> {item['url']}: {e}")
+            consecutive_errors += 1
+            if consecutive_errors >= _MAX_CONSECUTIVE_LLM_ERRORS:
+                raise RuntimeError(
+                    f"[{label}] model at {llm.provider} failed {consecutive_errors} items in a row "
+                    f"(last error: {e}) — aborting rather than publishing a near-empty newsletter"
+                ) from e
             continue
+        consecutive_errors = 0
 
         title, summary = _parse_response(raw, original_title)
         if not summary:
@@ -190,5 +206,12 @@ def summarize_items(
         + (f", LLM failures: {stats['llm_failed']}" if stats["llm_failed"] else ""),
         flush=True,
     )
+
+    attempted = total - stats["no_content"]
+    if attempted and stats["llm_failed"] / attempted > _MAX_LLM_FAILED_FRACTION:
+        raise RuntimeError(
+            f"[{label}] model failed on {stats['llm_failed']} of {attempted} items — "
+            f"aborting rather than publishing a near-empty newsletter"
+        )
 
     return kept, stats
